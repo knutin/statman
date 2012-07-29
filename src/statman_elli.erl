@@ -14,7 +14,7 @@ handle(Req, Config) ->
             file:read_file(filename:join([docroot(Config), "index.html"]));
 
         [<<"statman">>, <<"stream">>] ->
-            ok = statman_server:add_subscriber(elli_request:chunk_ref(Req)),
+            ok = statman_elli_server:add_client(elli_request:chunk_ref(Req)),
             {chunk, [{<<"Content-Type">>, <<"text/event-stream">>}]};
 
         [<<"statman">>, <<"example_logging">>] ->
@@ -97,6 +97,12 @@ start_demo() ->
                      ]}
              ],
 
+
+    statman_elli_server:start_link(),
+
     statman_server:start_link(),
+    statman_server:add_subscriber(statman_elli_server),
+
     statman_gauge_poller:start_link(),
+
     elli:start_link([{callback, elli_middleware}, {callback_args, Config}]).

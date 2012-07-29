@@ -4,7 +4,7 @@
 %% and basho_stats_sample.
 
 -module(statman_histogram).
--export([init/0, record_value/2, clear/1, keys/0, summary/1]).
+-export([init/0, record_value/2, clear/1, keys/0, summary/1, summary_and_raw/1]).
 -compile([native]).
 -include_lib("eunit/include/eunit.hrl").
 
@@ -34,10 +34,18 @@ clear(UserKey) ->
 %% @doc: Returns a statistical summary of the values recorded with
 %% record_value/2. The data is reset at every call.
 summary(UserKey) ->
+    {Summary, _} = summary_and_raw(UserKey),
+    Summary.
+
+%% @doc: Returns the summary and the raw data used to compute said
+%% summary for further aggregation down-stream.
+summary_and_raw(UserKey) ->
     Data = get_data(UserKey),
     Summary = do_summary(Data),
     reset(UserKey, Data),
-    Summary.
+    {Summary, Data}.
+
+
 
 %%
 %% INTERNAL HELPERS
