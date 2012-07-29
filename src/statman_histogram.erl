@@ -5,6 +5,7 @@
 
 -module(statman_histogram).
 -export([init/0, record_value/2, clear/1, keys/0, summary/1, summary_and_raw/1]).
+-export([do_summary/1]).
 -compile([native]).
 -include_lib("eunit/include/eunit.hrl").
 
