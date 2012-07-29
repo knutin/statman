@@ -44,7 +44,7 @@ summary(UserKey) ->
 %%
 
 get_data(UserKey) ->
-    Query = [{{{UserKey, '$1'}, '$2'}, [], [{{'$1', '$2'}}]}],
+    Query = [{{{UserKey, '$1'}, '$2'}, [{'>', '$2', 0}], [{{'$1', '$2'}}]}],
     lists:sort(
       ets:select(?TABLE, Query)).
 
