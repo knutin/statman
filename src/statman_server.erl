@@ -24,7 +24,6 @@ add_subscriber(Ref) ->
 %%%===================================================================
 
 init([]) ->
-    ok = statman:init(),
     ok = statman_counter:init(),
     ok = statman_histogram:init(),
     ok = statman_gauge:init(),
