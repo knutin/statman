@@ -88,13 +88,17 @@ notify_subscribers(Subscribers, Chunk) ->
 
 counter_rate(Counters) ->
     AllCounters = statman_counter:get_all(),
-    Rates = lists:map(
+    Rates = lists:flatmap(
               fun ({{Id, UserKey} = Key, Count}) ->
                       PrevCount = case dict:find(Key, Counters) of
                                               {ok, C} -> C;
                                               error -> 0
                                           end,
-                      {[{id, Id}, {key, UserKey}, {rate, Count - PrevCount}]}
+                      case Count - PrevCount of
+                          0 -> [];
+                          Delta ->
+                              [{[{id, Id}, {key, UserKey}, {rate, Delta}]}]
+                      end
               end, AllCounters),
 
     NewCounters = lists:foldl(
