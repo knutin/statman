@@ -17,10 +17,10 @@ handle(Req, Config) ->
             ok = statman_server:add_subscriber(elli_request:chunk_ref(Req)),
             {chunk, [{<<"Content-Type">>, <<"text/event-stream">>}]};
 
-        [<<"statman">>, <<"example">>] ->
-            %% statman:request_init(),
-            %% statman:identify((identity_fun(Config))(Req)),
-            example_logging(Req);
+        [<<"statman">>, <<"example_logging">>] ->
+            rscope:identity(<<"/statman/example_logging">>),
+            example_logging(),
+            {ok, [], <<"OK">>};
 
         [<<"statman">>, <<"media">> | Path] ->
             Filepath = filename:join([docroot(Config) | Path]),
@@ -32,16 +32,14 @@ handle(Req, Config) ->
                     {404, <<"Not found">>}
             end;
         _ ->
-            %% statman:request_init(),
-            %% statman:identify((identity_fun(Config))(Req)),
+            rscope:identity((identity_fun(Config))(Req)),
             ignore
     end.
 
 handle_event(request_complete, _, _) ->
-    %% statman:request_complete(),
+    rscope:request_complete(),
     ok;
-handle_event(E, A, _) ->
-    error_logger:info_msg("~p, ~p~n", [E, A]),
+handle_event(_, _, _) ->
     ok.
 
 
@@ -65,13 +63,13 @@ valid_path(Path) ->
     end.
 
 %% @doc: Creates example counters and histograms
-example_logging(_Req) ->
+example_logging() ->
     statman:incr(example_reqs),
     statman:incr(foo),
-    statman:record_value(db_latency, 100),
+
     statman:record_value(db_latency, 19923),
-    statman:record_value(db_latency, 120),
-    {ok, [], <<"Statman logged example metrics">>}.
+    statman:record_value(db_latency, 120).
+
 
 %%
 %% DEMO
@@ -100,4 +98,5 @@ start_demo() ->
              ],
 
     statman_server:start_link(),
+    statman_gauge_poller:start_link(),
     elli:start_link([{callback, elli_middleware}, {callback_args, Config}]).

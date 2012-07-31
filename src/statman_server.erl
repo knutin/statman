@@ -114,6 +114,7 @@ histograms() ->
     Result.
 
 gauges() ->
+    statman_gauge:expire(),
     lists:map(fun ({{Id, Key}, Value}) ->
                       {[{id, Id}, {key, Key}, {value, Value}]}
               end, statman_gauge:get_all()).
