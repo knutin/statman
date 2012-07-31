@@ -49,16 +49,16 @@ handle_info(report, #state{subscribers = Subscribers} = State) ->
     Chunk = iolist_to_binary(["data: ", jiffy:encode(Json), "\n\n"]),
     NewSubscribers = notify_subscribers(Subscribers, Chunk),
 
-    statman_counter:incr({<<"statman_internal">>, statman_reports}),
-    statman_counter:incr({<<"/example/request">>, highscore_db}, 30),
-    statman_counter:incr({<<"/example/request">>, user_db}, 10),
-    [statman_histogram:record_value({<<"/example/request">>, user_db}, N) ||
-        N <- lists:seq(20, 50)],
-    [statman_histogram:record_value({<<"/example/request">>, highscore_db}, N) ||
-        N <- lists:seq(10, 30)],
+    %% statman_counter:incr({<<"statman_internal">>, statman_reports}),
+    %% statman_counter:incr({<<"/example/request">>, highscore_db}, 30),
+    %% statman_counter:incr({<<"/example/request">>, user_db}, 10),
+    %% [statman_histogram:record_value({<<"/example/request">>, user_db}, N) ||
+    %%     N <- lists:seq(20, 50)],
+    %% [statman_histogram:record_value({<<"/example/request">>, highscore_db}, N) ||
+    %%     N <- lists:seq(10, 30)],
 
-    statman_gauge:set({<<"rscope">>, histograms_ets_size},
-                    proplists:get_value(size, ets:info(statman_histograms))),
+    %% statman_gauge:set({<<"rscope">>, histograms_ets_size},
+    %%                 proplists:get_value(size, ets:info(statman_histograms))),
 
     {noreply, State#state{counters = NewCounters, subscribers = NewSubscribers}}.
 
