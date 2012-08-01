@@ -29,7 +29,7 @@ remove_gauge(F) ->
 %%%===================================================================
 
 init([]) ->
-    erlang:send_after(1000, self(), report),
+    erlang:send_after(10000, self(), report),
     {ok, #state{fs = [fun ?MODULE:message_stats/0, fun ?MODULE:run_queue/0]}}.
 
 handle_call({add_gauge, GaugeF}, _From, #state{fs = Fs} = State) ->
@@ -42,7 +42,7 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info(report, State) ->
-    erlang:send_after(1000, self(), report),
+    erlang:send_after(10000, self(), report),
 
     lists:foreach(fun ({K, V}) ->
                           statman_gauge:set(K, V)
