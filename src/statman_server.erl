@@ -104,9 +104,13 @@ prev_count(Key) ->
     end.
 
 histograms() ->
-    lists:map(fun (Key) ->
-                      {Summary, Raw} = statman_histogram:summary_and_raw(Key),
-                      {Key, Summary, Raw}
+    lists:flatmap(fun (Key) ->
+                          case statman_histogram:summary_and_raw(Key) of
+                              {[], _} ->
+                                  [];
+                              {Summary, Raw} ->
+                                  [{Key, Summary, Raw}]
+                          end
               end, statman_histogram:keys()).
 
 gauges() ->
