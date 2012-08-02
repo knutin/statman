@@ -51,13 +51,13 @@ get_data(UserKey) ->
 summary([]) ->
     [];
 summary(Data) ->
-    {N, Sum, Sum2} = scan(Data),
+    {N, Sum, Sum2, Max} = scan(Data),
 
     [{observations, N},
      {min, find_quantile(Data, 0)},
      {median, find_quantile(Data, 0.50 * N)},
      {mean, Sum / N},
-     {max, find_quantile(Data, 100 * N)},
+     {max, Max},
      {sd, sd(N, Sum, Sum2)},
      {p95, find_quantile(Data, 0.95 * N)},
      {p99, find_quantile(Data, 0.99 * N)}
@@ -80,13 +80,17 @@ reset(UserKey, [{Key, Value} | Data]) ->
 %%
 
 scan(Data) ->
-    scan(0, 0, 0, Data).
+    scan(0, 0, 0, 0, Data).
 
-scan(N, Sum, Sum2, []) ->
-    {N, Sum, Sum2};
-scan(N, Sum, Sum2, [{Value, Weight} | Rest]) ->
+scan(N, Sum, Sum2, Max, []) ->
+    {N, Sum, Sum2, Max};
+scan(N, Sum, Sum2, Max, [{Value, Weight} | Rest]) ->
     V = Value * Weight,
-    scan(N + Weight, Sum + V, Sum2 + ((Value * Value) * Weight), Rest).
+    scan(N + Weight,
+         Sum + V,
+         Sum2 + ((Value * Value) * Weight),
+         max(Max, Value),
+         Rest).
 
 
 sd(N, _Sum, _Sum2) when N < 2 ->
