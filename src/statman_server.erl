@@ -7,20 +7,20 @@
 -module(statman_server).
 -behaviour(gen_server).
 
--export([start_link/0, add_subscriber/1, remove_subscriber/1, report/0]).
+-export([start_link/1, add_subscriber/1, remove_subscriber/1, report/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {counters, subscribers = []}).
+-record(state, {counters, subscribers = [], report_interval}).
 -define(COUNTERS_TABLE, statman_server_counters).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
-start_link() ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+start_link(ReportInterval) ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [ReportInterval], []).
 
 add_subscriber(Ref) ->
     gen_server:call(?MODULE, {add_subscriber, Ref}).
@@ -35,15 +35,15 @@ report() ->
 %%% gen_server callbacks
 %%%===================================================================
 
-init([]) ->
+init([ReportInterval]) ->
     ok = statman_counter:init(),
     ok = statman_gauge:init(),
     ok = statman_histogram:init(),
 
     ok = create_cache_tables(),
 
-    erlang:send_after(1000, self(), report),
-    {ok, #state{counters = dict:new()}}.
+    erlang:send_after(ReportInterval, self(), report),
+    {ok, #state{counters = dict:new(), report_interval = ReportInterval}}.
 
 handle_call({add_subscriber, Ref}, _From, #state{subscribers = Sub} = State) ->
     {reply, ok, State#state{subscribers = [Ref | Sub]}};
@@ -55,7 +55,7 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info(report, #state{subscribers = Subscribers} = State) ->
-    erlang:send_after(1000, self(), report),
+    erlang:send_after(State#state.report_interval, self(), report),
 
     Stats = [{node, node()},
              {rates, counter_rates()},
