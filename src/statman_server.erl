@@ -58,7 +58,7 @@ handle_info(report, #state{subscribers = Subscribers} = State) ->
     erlang:send_after(State#state.report_interval, self(), report),
 
     Stats = [{node, node()},
-             {rates, counter_rates()},
+             {rates, counter_rates(State#state.report_interval / 1000)},
              {histograms, histograms()},
              {gauges, gauges()}],
 
@@ -82,7 +82,7 @@ create_cache_tables() ->
     ets:new(?COUNTERS_TABLE, [named_table, private, set]),
     ok.
 
-counter_rates() ->
+counter_rates(ReportInterval) ->
     lists:flatmap(fun ({Key, Count}) ->
                           case Count - prev_count(Key) of
                               0 ->
@@ -90,7 +90,7 @@ counter_rates() ->
                                   [];
                               Delta ->
                                   ets:insert(?COUNTERS_TABLE, {Key, Count}),
-                                  [{Key, Delta, Count}]
+                                  [{Key, Delta / ReportInterval, Count}]
                           end
                   end, statman_counter:get_all()).
 
