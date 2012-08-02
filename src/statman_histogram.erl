@@ -4,8 +4,14 @@
 %% and basho_stats_sample.
 
 -module(statman_histogram).
--export([init/0, record_value/2, clear/1, keys/0, summary/1, summary_and_raw/1]).
--export([do_summary/1]).
+-export([init/0,
+         record_value/2,
+         clear/1,
+         keys/0,
+         get_data/1,
+         summary/1,
+         reset/2]).
+
 -compile([native]).
 -include_lib("eunit/include/eunit.hrl").
 
@@ -32,44 +38,19 @@ keys() ->
 clear(UserKey) ->
     ets:select_delete(?TABLE, [{{{UserKey, '_'}, '_'}, [], [true]  }]).
 
-%% @doc: Returns a statistical summary of the values recorded with
-%% record_value/2. The data is reset at every call.
-summary(UserKey) ->
-    {Summary, _} = summary_and_raw(UserKey),
-    Summary.
 
-%% @doc: Returns the summary and the raw data used to compute said
-%% summary for further aggregation down-stream.
-summary_and_raw(UserKey) ->
-    Data = get_data(UserKey),
-    Summary = do_summary(Data),
-    reset(UserKey, Data),
-    {Summary, Data}.
-
-
-
-%%
-%% INTERNAL HELPERS
-%%
-
+%% @doc: Returns the raw histogram recorded by record_value/2,
+%% suitable for passing to summary/1 and reset/2
 get_data(UserKey) ->
     Query = [{{{UserKey, '$1'}, '$2'}, [{'>', '$2', 0}], [{{'$1', '$2'}}]}],
     lists:sort(
       ets:select(?TABLE, Query)).
 
-%% @doc: Decrements the frequency counters with the current values
-%% given, effectively resetting while keeping updates written during
-%% our stats calculations.
-reset(_UserKey, []) ->
-    ok;
-reset(UserKey, [{Key, Value} | Data]) ->
-    ets:update_counter(?TABLE, {UserKey, Key}, -Value),
-    reset(UserKey, Data).
 
-
-do_summary([]) ->
+%% @doc: Returns summary statistics from the raw data
+summary([]) ->
     [];
-do_summary(Data) ->
+summary(Data) ->
     {N, Sum, Sum2} = scan(Data),
 
     [{observations, N},
@@ -81,6 +62,22 @@ do_summary(Data) ->
      {p95, find_quantile(Data, 0.95 * N)},
      {p99, find_quantile(Data, 0.99 * N)}
     ].
+
+
+
+%% @doc: Decrements the frequency counters with the current values
+%% given, effectively resetting while keeping updates written during
+%% our stats calculations.
+reset(_UserKey, []) ->
+    ok;
+reset(UserKey, [{Key, Value} | Data]) ->
+    ets:update_counter(?TABLE, {UserKey, Key}, -Value),
+    reset(UserKey, Data).
+
+
+%%
+%% INTERNAL HELPERS
+%%
 
 scan(Data) ->
     scan(0, 0, 0, Data).
@@ -97,10 +94,6 @@ sd(N, _Sum, _Sum2) when N < 2 ->
 sd(N, Sum, Sum2) ->
     SumSq = Sum * Sum,
     math:sqrt((Sum2 - (SumSq / N)) / (N - 1)).
-
-
-
-
 
 
 histogram_incr(Key, Incr) ->
@@ -160,7 +153,7 @@ test_stats() ->
                      {sd, 28.914300774835606}, %% Checked with R
                      {p95, 95},
                      {p99, 99}],
-    ?assertEqual(ExpectedStats, do_summary([{N, 3} || N <- lists:seq(1, 100)])).
+    ?assertEqual(ExpectedStats, summary([{N, 3} || N <- lists:seq(1, 100)])).
 
 test_histogram() ->
     [record_value(key, N) || N <- lists:seq(1, 100)],
@@ -176,15 +169,15 @@ test_histogram() ->
                      {p95, 95},
                      {p99, 99}],
 
-    ?assertEqual(ExpectedStats, summary(key)),
+    ?assertEqual(ExpectedStats, summary(get_data(key))),
 
     ?assertEqual(100, clear(key)),
-    ?assertEqual([], summary(key)),
+    ?assertEqual([], summary(get_data(key))),
 
     [record_value(key, N) || N <- lists:seq(1, 100)],
     [record_value(key, N) || N <- lists:seq(1, 100)],
     [record_value(key, N) || N <- lists:seq(1, 100)],
-    ?assertEqual(ExpectedStats, summary(key)).
+    ?assertEqual(ExpectedStats, summary(get_data(key))).
 
 
 test_reset() ->
@@ -194,14 +187,15 @@ test_reset() ->
                     ets:select(?TABLE, [{{{key, '_'}, '$1'}, [], ['$1']}]))
           end,
     ?assertEqual(100, Sum()),
-    summary(key),
+    reset(key, get_data(key)),
     ?assertEqual(0, Sum()).
 
 
 test_samples() ->
     %% In R: sd(1:100) = 29.01149
     [record_value(key, N) || N <- lists:seq(1, 100)],
-    ?assertEqual(29.011491975882016, proplists:get_value(sd, summary(key))),
+    ?assertEqual(29.011491975882016,
+                 proplists:get_value(sd, summary(get_data(key)))),
 
     %% ?assertEqual(103, clear(key)),
     %% ?assertEqual('NaN', sd(key)).
