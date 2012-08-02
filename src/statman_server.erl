@@ -40,8 +40,6 @@ init([ReportInterval]) ->
     ok = statman_gauge:init(),
     ok = statman_histogram:init(),
 
-    ok = create_cache_tables(),
-
     erlang:send_after(ReportInterval, self(), report),
     {ok, #state{counters = dict:new(), report_interval = ReportInterval}}.
 
@@ -54,17 +52,18 @@ handle_call({remove_subscriber, Ref}, _From, #state{subscribers = Sub} = State) 
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info(report, #state{subscribers = Subscribers} = State) ->
+handle_info(report, State) ->
     erlang:send_after(State#state.report_interval, self(), report),
 
     Stats = [{node, node()},
-             {rates, counter_rates(State#state.report_interval / 1000)},
+             {window, State#state.report_interval},
+             {counters, counters()},
              {histograms, histograms()},
              {gauges, gauges()}],
 
     lists:foreach(fun (S) ->
                           gen_server:cast(S, {statman_update, Stats})
-                  end, Subscribers),
+                  end, State#state.subscribers),
 
     {noreply, State}.
 
@@ -78,44 +77,17 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-create_cache_tables() ->
-    ets:new(?COUNTERS_TABLE, [named_table, private, set]),
-    ok.
-
-counter_rates(ReportInterval) ->
-    lists:flatmap(fun ({Key, Count}) ->
-                          case Count - prev_count(Key) of
-                              0 ->
-                                  ets:insert(?COUNTERS_TABLE, {Key, Count}),
-                                  [];
-                              Delta ->
-                                  ets:insert(?COUNTERS_TABLE, {Key, Count}),
-                                  [{Key, Delta / ReportInterval, Count}]
-                          end
-                  end, statman_counter:get_all()).
-
-
-prev_count(Key) ->
-    case ets:lookup(?COUNTERS_TABLE, Key) of
-        [{Key, Count}] ->
-            Count;
-        [] ->
-            0
-    end.
+counters() ->
+    statman_counter:get_all().
 
 histograms() ->
-    lists:flatmap(fun (Key) ->
-                          case statman_histogram:summary_and_raw(Key) of
-                              {[], _} ->
-                                  [];
-                              {Summary, Raw} ->
-                                  [{Key, Summary, Raw}]
-                          end
+    lists:map(fun (Key) ->
+                      statman_histogram:get_data(Key)
               end, statman_histogram:keys()).
 
 gauges() ->
     statman_gauge:expire(),
     lists:map(fun ({Key, Value}) ->
-                      {Key, Value, Value}
+                      {Key, Value}
               end, statman_gauge:get_all()).
 

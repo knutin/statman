@@ -40,11 +40,20 @@ handle_call({remove_subscriber, Ref}, _From, #state{subscribers = Sub} = State) 
     {reply, ok, State#state{subscribers = lists:delete(Ref, Sub)}}.
 
 
-handle_cast({statman_update, Stats}, State) ->
-    error_logger:info_msg("merger got ~p~n", [Stats]),
-    {noreply, State}.
+handle_cast({statman_update, Update}, #state{slots = Slots} = State) ->
+    %% We keep one update per node. When we want to report, we merge
+    %% these together.
+    %% error_logger:info_msg("merger got ~p~n", [Update]),
+    Node = proplists:get_value(node, Update),
+    {noreply, State#state{slots = orddict:store(Node, Update, Slots)}}.
 
-handle_info(_, State) ->
+handle_info(report, State) ->
+    Merged = merge(State#state.slots),
+    error_logger:info_msg("merged: ~p~n", [Merged]),
+    lists:foreach(fun (S) ->
+                          gen_server:cast(S, {statman_merged, Merged})
+                  end, State#state.subscribers),
+
     {noreply, State}.
 
 terminate(_Reason, _State) ->
@@ -57,46 +66,36 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-
-rates(Stats) ->
-    lists:map(fun ({FullKey, Rate, _}) ->
-                      {Id, Key} = id_key(FullKey),
-                      {[{id, Id}, {key, Key}, {rate, Rate}]}
-              end, proplists:get_value(rates, Stats, [])).
-
-
-histograms(Stats) ->
-    lists:map(fun ({FullKey, Summary, _}) ->
-                      {Id, Key} = id_key(FullKey),
-                      {[{id, Id}, {key, Key} | Summary]}
-              end, proplists:get_value(histograms, Stats, [])).
-
-gauges(Stats) ->
-    lists:map(fun ({FullKey, Value, _}) ->
-                      {Id, Key} = id_key(FullKey),
-                      {[{id, Id}, {key, Key}, {value, Value}]}
-              end, proplists:get_value(gauges, Stats, [])).
-
-id_key({Id, Key}) -> {Id, Key};
-id_key(Key) -> {undefined, Key}.
+merge(Updates) ->
+    orddict:fold(fun (_Node, Update, Acc) ->
+                         do_merge(Update, Acc)
+                 end,
+                 [{histograms, []}, {counters, []}],
+                 Updates).
 
 
-merge(Left, Right) ->
-    [{histograms, lists:map(
-                    fun ({Key, _, LeftRaw}) ->
-                            {Key, _, RightRaw} =
-                                lists:keyfind(Key, 1, proplists:get_value(histograms, Right, [])),
-                            {Summary, NewRaw} = merge_histogram(LeftRaw, RightRaw),
-                            {Key, Summary, NewRaw}
-                    end, proplists:get_value(histograms, Left, []))}].
 
+do_merge(Left, Right) ->
+    MergeHistogramF = fun (_Key, LeftHistogram, RightHistogram) ->
+                              orddict:merge(fun (_Value, LeftFreq, RightFreq) ->
+                                                    LeftFreq + RightFreq
+                                            end, LeftHistogram, RightHistogram)
+                      end,
+    MergeCounterF = fun (_Key, LeftValue, RightValue) ->
+                            LeftValue + RightValue
+                    end,
 
-merge_histogram(Left, Right) ->
-    NewRaw = lists:foldl(fun ({K, V}, Acc) ->
-                                 orddict:update_counter(K, V, Acc)
-                         end, orddict:new(), Left ++ Right),
-
-    {statman_histogram:do_summary(NewRaw), NewRaw}.
+    [{histograms, orddict:merge(MergeHistogramF,
+                                orddict:from_list(
+                                  proplists:get_value(histograms, Left)),
+                                orddict:from_list(
+                                  proplists:get_value(histograms, Right)))},
+     {counters, orddict:merge(MergeCounterF,
+                              orddict:from_list(
+                               proplists:get_value(counters, Left)),
+                              orddict:from_list(
+                               proplists:get_value(counters, Right)))}
+                             ].
 
 
 
@@ -104,26 +103,29 @@ merge_histogram(Left, Right) ->
 %% TESTS
 %%
 
+example_nodedata(Name) ->
+    [{node,Name},
+     {counters,[{baz, 30}]},
+     {histograms,[{{foo,bar},
+                   [{1,1}, {2,1}, {3,1}]}]},
+     {gauges,[{{system,run_queue},19,19},
+              {{messaging,messages_in_queue},19,19},
+              {{messaging,processes_with_queues},19,19}]}].
+
 merge_test() ->
-    NodeData = fun(Name) ->
-                       [{node,Name},
-                        {rates,[]},
-                        {histograms,[{{foo,bar},
-                                      [{observations,10},
-                                       {min,1},
-                                       {median,5},
-                                       {mean,5.5},
-                                       {max,10},
-                                       {sd,3.0276503540974917},
-                                       {p95,10},
-                                       {p99,10}],
-                                      [{1,1}, {2,1}, {3,1},
-                                       {4,1}, {5,1}, {6,1}, {7,1},
-                                       {8,1}, {9,1}, {10,1}]}]},
-                        {gauges,[{{system,run_queue},19,19},
-                                 {{messaging,messages_in_queue},19,19},
-                                 {{messaging,processes_with_queues},19,19}]}]
-               end,
+    ?assertEqual([{histograms, [{{foo, bar},
+                                 [{1,2}, {2,2}, {3,2}]}]},
+                  {counters, [{baz, 60}]}],
+                 do_merge(example_nodedata(node1), example_nodedata(node2))).
 
-    ?assertEqual([], merge(NodeData(node1), NodeData(node2))).
 
+report_test() ->
+    {ok, Init} = init([]),
+    {noreply, S1} = handle_cast({statman_update, example_nodedata(foo)}, Init),
+    {noreply, S2} = handle_cast({statman_update, example_nodedata(bar)}, S1),
+    {noreply, S3} = handle_cast({statman_update, example_nodedata(quux)}, S2),
+
+    ?assertEqual([{histograms, [{{foo, bar},
+                                 [{1,3}, {2,3}, {3,3}]}]},
+                  {counters, [{baz, 90}]}],
+                 merge(S3#state.slots)).
