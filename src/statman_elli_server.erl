@@ -9,6 +9,7 @@
          terminate/2, code_change/3]).
 
 -record(state, {clients = []}).
+-define(COUNTERS_TABLE, statman_elli_server_counters).
 
 %%%===================================================================
 %%% API
@@ -25,6 +26,7 @@ add_client(Ref) ->
 %%%===================================================================
 
 init([]) ->
+    ets:new(?COUNTERS_TABLE, [named_table, protected, set]),
     {ok, #state{clients = []}}.
 
 handle_call({add_client, Ref}, _From, #state{clients = Clients} = State) ->
@@ -65,21 +67,39 @@ notify_subscribers(Subscribers, Chunk) ->
               end
       end, Subscribers).
 
-rates(Stats) ->
-    lists:map(fun ({FullKey, Rate, _}) ->
-                      {Id, Key} = id_key(FullKey),
-                      {[{id, Id}, {key, Key}, {rate, Rate}]}
-              end, proplists:get_value(rates, Stats, [])).
+window(Stats) ->
+    proplists:get_value(window, Stats, 1000).
 
+rates(Stats) ->
+    lists:flatmap(fun ({FullKey, Count}) ->
+                      {Id, Key} = id_key(FullKey),
+                      case Count - prev_count(FullKey) of
+                          0 ->
+                              ets:insert(?COUNTERS_TABLE, {Key, Count}),
+                              [];
+                          Delta ->
+                              ets:insert(?COUNTERS_TABLE, {Key, Count}),
+                              [{[{id, Id}, {key, Key},
+                                 {rate, Delta / window(Stats)}]}]
+                      end
+                  end, proplists:get_value(counters, Stats, [])).
+
+prev_count(Key) ->
+    case ets:lookup(?COUNTERS_TABLE, Key) of
+        [{Key, Count}] ->
+            Count;
+        [] ->
+            0
+    end.
 
 histograms(Stats) ->
-    lists:map(fun ({FullKey, Summary, _}) ->
+    lists:map(fun ({FullKey, Raw}) ->
                       {Id, Key} = id_key(FullKey),
-                      {[{id, Id}, {key, Key} | Summary]}
+                      {[{id, Id}, {key, Key} | statman_histogram:summary(Raw)]}
               end, proplists:get_value(histograms, Stats, [])).
 
 gauges(Stats) ->
-    lists:map(fun ({FullKey, Value, _}) ->
+    lists:map(fun ({FullKey, Value}) ->
                       {Id, Key} = id_key(FullKey),
                       {[{id, Id}, {key, Key}, {value, Value}]}
               end, proplists:get_value(gauges, Stats, [])).
