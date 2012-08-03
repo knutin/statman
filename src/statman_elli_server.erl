@@ -68,20 +68,20 @@ notify_subscribers(Subscribers, Chunk) ->
       end, Subscribers).
 
 window(Stats) ->
-    proplists:get_value(window, Stats, 1000).
+    proplists:get_value(window, Stats, 1000) / 1000.
 
 rates(Stats) ->
     lists:flatmap(fun ({FullKey, Count}) ->
-                      {Id, Key} = id_key(FullKey),
-                      case Count - prev_count(FullKey) of
-                          0 ->
-                              ets:insert(?COUNTERS_TABLE, {Key, Count}),
-                              [];
-                          Delta ->
-                              ets:insert(?COUNTERS_TABLE, {Key, Count}),
-                              [{[{id, Id}, {key, Key},
-                                 {rate, Delta / window(Stats)}]}]
-                      end
+                          {Id, Key} = id_key(FullKey),
+                          case Count - prev_count(FullKey) of
+                              0 ->
+                                  ets:insert(?COUNTERS_TABLE, {FullKey, Count}),
+                                  [];
+                              Delta ->
+                                  ets:insert(?COUNTERS_TABLE, {FullKey, Count}),
+                                  [{[{id, Id}, {key, Key},
+                                     {rate, Delta / window(Stats)}]}]
+                          end
                   end, proplists:get_value(counters, Stats, [])).
 
 prev_count(Key) ->
