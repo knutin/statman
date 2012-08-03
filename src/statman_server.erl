@@ -82,7 +82,9 @@ counters() ->
 
 histograms() ->
     lists:map(fun (Key) ->
-                      statman_histogram:get_data(Key)
+                      Data = statman_histogram:get_data(Key),
+                      statman_histogram:reset(Key, Data),
+                      {Key, Data}
               end, statman_histogram:keys()).
 
 gauges() ->

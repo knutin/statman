@@ -95,9 +95,14 @@ prev_count(Key) ->
     end.
 
 histograms(Stats) ->
-    lists:map(fun ({FullKey, Raw}) ->
-                      {Id, Key} = id_key(FullKey),
-                      {[{id, Id}, {key, Key} | statman_histogram:summary(Raw)]}
+    lists:flatmap(fun ({FullKey, Raw}) ->
+                          {Id, Key} = id_key(FullKey),
+                          case statman_histogram:summary(Raw) of
+                              [] ->
+                                  [];
+                              Summary ->
+                                  [{[{id, Id}, {key, Key} | Summary]}]
+                          end
               end, proplists:get_value(histograms, Stats, [])).
 
 gauges(Stats) ->
