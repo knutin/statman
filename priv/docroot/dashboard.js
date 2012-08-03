@@ -5,7 +5,10 @@ $(document).ready(function() {
 
     e.onmessage = function (event) {
         var data = $.parseJSON(event.data);
-        // console.log(data);
+        //console.log(data);
+
+        $("#title").html("statman@" + data['hostname']);
+        $("title").html("statman@" + data['hostname']);
 
         $("#counters tbody").html('');
         $("#gauges tbody").html('');

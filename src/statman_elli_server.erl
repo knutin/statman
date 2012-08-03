@@ -33,7 +33,9 @@ handle_call({add_client, Ref}, _From, #state{clients = Clients} = State) ->
     {reply, ok, State#state{clients = [Ref | Clients]}}.
 
 handle_cast({statman_update, Stats}, State) ->
-    Json = {[{rates, rates(Stats)},
+    {ok, Hostname} = inet:gethostname(),
+    Json = {[{hostname, list_to_binary(Hostname)},
+             {rates, rates(Stats)},
              {histograms, histograms(Stats)},
              {gauges, gauges(Stats)}]},
     Chunk = ["data: ", jiffy:encode(Json), "\n\n"],

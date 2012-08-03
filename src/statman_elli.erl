@@ -101,7 +101,7 @@ start_demo() ->
     statman_elli_server:start_link(),
     statman_merger:start_link(),
 
-    statman_server:start_link(),
+    statman_server:start_link(1000),
     statman_server:add_subscriber(statman_elli_server),
     statman_server:add_subscriber(statman_merger),
 
