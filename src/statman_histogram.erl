@@ -12,6 +12,8 @@
          summary/1,
          reset/2]).
 
+-export([bin/1]).
+
 -compile([native]).
 -include_lib("eunit/include/eunit.hrl").
 
@@ -79,6 +81,16 @@ reset(UserKey, [{Key, Value} | Data]) ->
 %% INTERNAL HELPERS
 %%
 
+bin(0) -> 0;
+
+bin(N) ->
+    case (N div 1000) * 1000 of
+        0 ->
+            1;
+        Bin ->
+            Bin
+    end.
+
 scan(Data) ->
     scan(0, 0, 0, 0, Data).
 
@@ -137,7 +149,8 @@ histogram_test_() ->
       ?_test(test_histogram()),
       ?_test(test_samples()),
       ?_test(test_reset()),
-      ?_test(test_keys())
+      ?_test(test_keys()),
+      ?_test(test_binning())
      ]
     }.
 
@@ -214,3 +227,26 @@ test_keys() ->
     record_value(baz, 1),
 
     ?assertEqual([bar, baz, foo], keys()).
+
+
+test_binning() ->
+    random:seed({1, 2, 3}),
+    Values = [random:uniform(1000000) || _ <- lists:seq(1, 1000)],
+
+    [record_value(foo, V) || V <- Values],
+    _NormalSummary = summary(get_data(foo)),
+    reset(foo, get_data(foo)),
+
+    [record_value(foo, bin(V)) || V <- Values],
+    _BinnedSummary = summary(get_data(foo)),
+
+    ok.
+
+
+bin_test() ->
+    ?assertEqual(0, bin(0)),
+    ?assertEqual(1, bin(1)),
+    ?assertEqual(1, bin(999)),
+    ?assertEqual(1000, bin(1000)),
+    ?assertEqual(1000, bin(1001)),
+    ?assertEqual(2000, bin(2000)).
