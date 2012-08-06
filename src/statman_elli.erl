@@ -63,6 +63,7 @@ example_logger() ->
                   statman_counter:incr({http, hits}),
                   statman_counter:incr({db, hits}, 20),
                   statman_gauge:set({db, connections}, random:uniform(10)),
+                  statman_gauge:set(runners, random:uniform(10)),
 
                   statman_histogram:record_value(
                     {<<"/highscores">>, db_a_latency}, random:uniform(30)),

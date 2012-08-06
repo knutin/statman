@@ -8,7 +8,7 @@ $(document).ready(function() {
 
     e.onmessage = function (event) {
         var data = $.parseJSON(event.data);
-        //console.log(data);
+        console.log(data);
 
         if (data['nodes']) {
             $("#counters thead").html('');
@@ -36,7 +36,11 @@ $(document).ready(function() {
 function display_rates(data) {
     var rates = _.uniq(_.flatten(_.map(data['nodes'], function (v) {
         return _.map(v['node']['rates'], function (r) {
-            return r['id'] + ":" + r['key'];
+            if (r['id']) {
+                return r['id'] + ":" + r['key'];
+            } else {
+                return r['key'];
+            }
         });
     }), true));
 
@@ -60,7 +64,11 @@ function display_rates(data) {
 function display_gauges(data) {
     var gauges = _.uniq(_.flatten(_.map(data['nodes'], function (v) {
         return _.map(v['node']['gauges'], function (g) {
-            return g['id'] + ":" + g['key'];
+            if (g['id']) {
+                return g['id'] + ":" + g['key'];
+            } else {
+                return g['key'];
+            }
         });
     }), true));
 

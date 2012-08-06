@@ -129,4 +129,4 @@ gauges(Stats) ->
               end, proplists:get_value(gauges, Stats, [])).
 
 id_key({Id, Key}) -> {Id, Key};
-id_key(Key) -> {undefined, Key}.
+id_key(Key) -> {null, Key}.
