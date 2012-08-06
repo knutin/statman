@@ -7,8 +7,6 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([message_stats/0, run_queue/0]).
-
 -record(state, {fs = []}).
 
 %%%===================================================================
@@ -30,7 +28,7 @@ remove_gauge(F) ->
 
 init([]) ->
     erlang:send_after(10000, self(), report),
-    {ok, #state{fs = [fun ?MODULE:message_stats/0, fun ?MODULE:run_queue/0]}}.
+    {ok, #state{fs = []}}.
 
 handle_call({add_gauge, GaugeF}, _From, #state{fs = Fs} = State) ->
     {reply, ok, State#state{fs = [GaugeF | Fs]}};
@@ -59,23 +57,3 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-
-message_stats() ->
-    ProcessInfo = lists:flatmap(
-                    fun (Pid) ->
-                            case process_info(Pid, message_queue_len) of
-                                undefined ->
-                                    [];
-                                {message_queue_len, 0} ->
-                                    [];
-                                {message_queue_len, Count} ->
-                                    [{Count, Pid}]
-                            end
-                    end, processes()),
-    TotalQueue = lists:sum(element(1, lists:unzip(ProcessInfo))),
-
-    [{{messaging, processes_with_queues}, length(ProcessInfo)},
-     {{messaging, messages_in_queue}, TotalQueue}].
-
-run_queue() ->
-    [{{system, run_queue}, erlang:statistics(run_queue)}].
