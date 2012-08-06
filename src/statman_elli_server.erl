@@ -101,7 +101,9 @@ histograms(Stats) ->
                               [] ->
                                   [];
                               Summary ->
-                                  [{[{id, Id}, {key, Key} | Summary]}]
+                                  Num = proplists:get_value(observations, Summary, 0),
+                                  [{[{id, Id}, {key, Key}, {rate, Num / window(Stats)}
+                                     | Summary]}]
                           end
               end, proplists:get_value(histograms, Stats, [])).
 

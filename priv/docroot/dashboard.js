@@ -60,6 +60,7 @@ function append_histogram(histograms) {
         $("#histograms tbody:last").append("<tr>" +
                                            "<td></td>" +
                                            "<td>" + h['key'] + "</td>" +
+                                           "<td>" + h['rate'] + "</td>" +
                                            "<td>" + h['observations'] + "</td>" +
                                            "<td>" + format_us(h['mean']) + " ms</td>" +
                                            "<td>" + format_us(h['sd']) + "</td>" +
