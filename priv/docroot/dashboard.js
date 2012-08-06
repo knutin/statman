@@ -1,3 +1,6 @@
+var nodes = {};
+
+
 $(document).ready(function() {
     var e = new EventSource("statman/stream");
     e.addEventListener("open", function (event) {
@@ -7,37 +10,81 @@ $(document).ready(function() {
         var data = $.parseJSON(event.data);
         //console.log(data);
 
-        $("#title").html("statman@" + data['hostname']);
-        $("title").html("statman@" + data['hostname']);
+        if (data['nodes']) {
+            $("#counters thead").html('');
+            $("#counters tbody").html('');
+            $("#gauges thead").html('');
+            $("#gauges tbody").html('');
 
-        $("#counters tbody").html('');
-        $("#gauges tbody").html('');
-        $("#histograms tbody").html('');
+            display_rates(data);
+            display_gauges(data);
+        }
 
-        var counters = _.groupBy(data['rates'], function (c) { return c['id'] });
-        var gauges = _.groupBy(data['gauges'], function (g) { return g['id'] });
-        var histograms = _.groupBy(data['histograms'], function (h) { return h['id']; });
+        if (data['merge']) {
+            console.log(data);
+            $("#histograms tbody").html('');
 
-        _.each(counters, append_counter);
-        _.each(gauges, append_gauge);
-        _.each(histograms, append_histogram);
 
+            var histograms = _.groupBy(data['merge']['histograms'],
+                                       function (h) { return h['id']; });
+            $("#histogram_nodes").html("from " + data['merge']['nodes'].join(","));
+            _.each(histograms, append_histogram);
+        }
     };
 });
 
-function append_counter(counters) {
-    $("#counters tbody:last").append("<tr>" +
-                                     "<td colspan='3'>" + counters[0]['id'] + "</td>" +
-                                     "</tr>");
+function display_rates(data) {
+    var rates = _.uniq(_.flatten(_.map(data['nodes'], function (v) {
+        return _.map(v['node']['rates'], function (r) {
+            return r['id'] + ":" + r['key'];
+        });
+    }), true));
 
-    _.each(counters, function (c) {
-        $("#counters tbody:last").append("<tr>" +
-                                         "<td></td>" +
-                                         "<td>" + c['key'] + "</td>" +
-                                         "<td>" + c['rate'] + "</td>" +
-                                         "</tr>");
+    var headers = _.map(rates, function (r) {
+        return "<th>" + r + "</th>";
+    });
+    var header_str = "<tr><th>Node</th>" + headers + "</tr>";
+    $("#counters thead:last").append(header_str);
+
+    _.each(data['nodes'], function (n) {
+        var rates = _.map(n['node']['rates'], function (r) {
+            return "<td>" + r['rate'] + "</td>";
+        });
+        $("#counters tbody:last").append("<tr><td>" + n['node']['name'] + "</td>" +
+                                         rates +
+                                         "</tr>"
+                                        );
     });
 }
+
+function display_gauges(data) {
+    var gauges = _.uniq(_.flatten(_.map(data['nodes'], function (v) {
+        return _.map(v['node']['gauges'], function (g) {
+            return g['id'] + ":" + g['key'];
+        });
+    }), true));
+
+    var headers = _.map(gauges, function (g) {
+        return "<th>" + g + "</th>";
+    });
+    var header_str = "<tr><th>Node</th>" + headers + "</tr>";
+    $("#gauges thead:last").append(header_str);
+
+    _.each(data['nodes'], function (n) {
+        var gauges = _.map(n['node']['gauges'], function (g) {
+            return "<td>" + g['value'] + "</td>";
+        });
+        $("#gauges tbody:last").append("<tr><td>" + n['node']['name'] + "</td>" +
+                                       gauges +
+                                       "</tr>"
+                                        );
+    });
+
+
+}
+
+
+
 
 function append_gauge(gauges) {
     $("#gauges tbody:last").append("<tr>" +
@@ -53,8 +100,9 @@ function append_gauge(gauges) {
 }
 
 function append_histogram(histograms) {
+    console.log(histograms);
     $("#histograms tbody:last").append("<tr>" +
-                                       "<td colspan='8'>" + histograms[0]['id'] + "</td>" +
+                                       "<td colspan='9'>" + histograms[0]['id'] + "</td>" +
                                        "</tr>");
     _.each(histograms, function (h) {
         $("#histograms tbody:last").append("<tr>" +
