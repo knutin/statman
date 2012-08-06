@@ -55,11 +55,11 @@ handle_cast(_Msg, State) ->
 handle_info(report, State) ->
     erlang:send_after(State#state.report_interval, self(), report),
 
-    Stats = [{node, node()},
-             {window, State#state.report_interval},
-             {counters, counters()},
-             {histograms, histograms()},
-             {gauges, gauges()}],
+    Stats = [[{node, node()},
+              {window, State#state.report_interval},
+              {counters, counters()},
+              {histograms, histograms()},
+              {gauges, gauges()}]],
 
     lists:foreach(fun (S) ->
                           gen_server:cast(S, {statman_update, Stats})

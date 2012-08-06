@@ -2,7 +2,7 @@
 -module(statman_elli).
 -behaviour(elli_handler).
 -export([handle/2, handle_event/3]).
--export([start_demo/0]).
+-export([start_demo/0, example_logger/0]).
 
 %%
 %% ELLI CALLBACKS
@@ -16,11 +16,6 @@ handle(Req, Config) ->
         [<<"statman">>, <<"stream">>] ->
             ok = statman_elli_server:add_client(elli_request:chunk_ref(Req)),
             {chunk, [{<<"Content-Type">>, <<"text/event-stream">>}]};
-
-        [<<"statman">>, <<"example_logging">>] ->
-            rscope:identity(<<"/statman/example_logging">>),
-            example_logging(),
-            {ok, [], <<"OK">>};
 
         [<<"statman">>, <<"media">> | Path] ->
             Filepath = filename:join([docroot(Config) | Path]),
@@ -62,13 +57,22 @@ valid_path(Path) ->
         nomatch -> true
     end.
 
-%% @doc: Creates example counters and histograms
-example_logging() ->
-    statman:incr(example_reqs),
-    statman:incr(foo),
+example_logger() ->
+    Fun = fun(F) ->
+                  timer:sleep(random:uniform(50)),
+                  statman_counter:incr({http, hits}),
+                  statman_counter:incr({db, hits}, 20),
+                  statman_gauge:set({db, connections}, random:uniform(10)),
 
-    statman:record_value(db_latency, 19923),
-    statman:record_value(db_latency, 120).
+                  statman_histogram:record_value(
+                    {<<"/highscores">>, db_a_latency}, random:uniform(30)),
+                  statman_histogram:record_value(
+                    {<<"/highscores">>, db_b_latency}, random:uniform(30)),
+
+                  F(F)
+          end,
+
+    spawn(fun() -> Fun(Fun) end).
 
 
 %%
@@ -98,13 +102,33 @@ start_demo() ->
              ],
 
 
+    A = setup(a),
+    B = setup(b),
+
     statman_elli_server:start_link(),
     statman_merger:start_link(),
 
-    statman_server:start_link(1000),
-    statman_server:add_subscriber(statman_elli_server),
-    statman_server:add_subscriber(statman_merger),
 
-    statman_gauge_poller:start_link(),
+    ok = rpc:call(A, statman_server, add_subscriber, [{statman_merger, node()}]),
+    ok = rpc:call(B, statman_server, add_subscriber, [{statman_merger, node()}]),
+    rpc:call(A, statman_gauge_poller, start_link, []),
+    rpc:call(B, statman_gauge_poller, start_link, []),
 
-    elli:start_link([{callback, elli_middleware}, {callback_args, Config}]).
+    statman_merger:add_subscriber(statman_elli_server),
+
+    %% statman_gauge_poller:start_link(),
+
+    elli:start_link([{callback, elli_middleware}, {callback_args, Config}]),
+
+    ok.
+
+
+setup(Name) ->
+    error_logger:info_msg("starting ~p~n", [Name]),
+    {ok, Node} = slave:start_link(list_to_atom(net_adm:localhost()), Name),
+
+    true = rpc:call(Node, code, add_path, ["/home/knutin/git/statman/ebin"]),
+    rpc:call(Node, statman_server, start_link, [1000]),
+    spawn(Node, ?MODULE, example_logger, []),
+    Node.
+

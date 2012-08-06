@@ -32,16 +32,27 @@ init([]) ->
 handle_call({add_client, Ref}, _From, #state{clients = Clients} = State) ->
     {reply, ok, State#state{clients = [Ref | Clients]}}.
 
-handle_cast({statman_update, Stats}, State) ->
-    {ok, Hostname} = inet:gethostname(),
-    Json = {[{hostname, list_to_binary(Hostname)},
-             {rates, rates(Stats)},
-             {histograms, histograms(Stats)},
-             {gauges, gauges(Stats)}]},
-    Chunk = ["data: ", jiffy:encode(Json), "\n\n"],
+handle_cast({statman_update, Updates}, State) ->
+    Json = lists:map(fun (Update) ->
+                             {[{node, {[{name, get_node(Update)},
+                                        {rates, rates(Update)},
+                                        {histograms, histograms(Update)},
+                                        {gauges, gauges(Update)}]}}]}
+                     end, Updates),
+    Chunk = ["data: ", jiffy:encode({[{nodes, Json}]}), "\n\n"],
+    NewClients = notify_subscribers(State#state.clients, Chunk),
+
+    {noreply, State#state{clients = NewClients}};
+
+handle_cast({statman_merged, Stats}, State) ->
+    Json = {[{merge, {[{nodes, proplists:get_value(nodes, Stats, [])},
+                       {histograms, histograms(Stats)}]}}]},
+
+    Chunk = ["data:", jiffy:encode(Json), "\n\n"],
     NewClients = notify_subscribers(State#state.clients, Chunk),
 
     {noreply, State#state{clients = NewClients}}.
+
 
 handle_info(_, State) ->
     {noreply, State}.
@@ -72,15 +83,19 @@ notify_subscribers(Subscribers, Chunk) ->
 window(Stats) ->
     proplists:get_value(window, Stats, 1000) / 1000.
 
+get_node(Stats) ->
+    list_to_binary(atom_to_list(proplists:get_value(node, Stats))).
+
 rates(Stats) ->
+    Node = proplists:get_value(node, Stats),
     lists:flatmap(fun ({FullKey, Count}) ->
                           {Id, Key} = id_key(FullKey),
-                          case Count - prev_count(FullKey) of
+                          case Count - prev_count({Node, FullKey}) of
                               0 ->
-                                  ets:insert(?COUNTERS_TABLE, {FullKey, Count}),
+                                  ets:insert(?COUNTERS_TABLE, {{Node, FullKey}, Count}),
                                   [];
                               Delta ->
-                                  ets:insert(?COUNTERS_TABLE, {FullKey, Count}),
+                                  ets:insert(?COUNTERS_TABLE, {{Node, FullKey}, Count}),
                                   [{[{id, Id}, {key, Key},
                                      {rate, Delta / window(Stats)}]}]
                           end
