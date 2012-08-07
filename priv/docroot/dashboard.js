@@ -27,7 +27,7 @@ $(document).ready(function() {
 
             var histograms = _.groupBy(data['merge']['histograms'],
                                        function (h) { return h['id']; });
-            $("#histogram_nodes").html("from " + data['merge']['nodes'].join(","));
+            $("#histogram_nodes").html("from " + data['merge']['nodes'].join(", "));
             _.each(histograms, append_histogram);
         }
     };
