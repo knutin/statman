@@ -5,7 +5,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 
--define(TABLE, skald_counters).
+-define(TABLE, statman_counters).
 
 
 %%
@@ -13,7 +13,7 @@
 %%
 
 init() ->
-    ets:new(?TABLE, [named_table, public, set]),
+    ets:new(?TABLE, [named_table, public, set, {write_concurrency, true}]),
     ok.
 
 
@@ -54,6 +54,10 @@ set(Key, Value) ->
 
 
 incr(Key, Incr) ->
+    %% If lock contention on the single key becomes a problem, we can
+    %% use multiple keys and try to snapshot a value across all
+    %% subkeys. See
+    %% https://github.com/boundary/high-scale-lib/blob/master/src/main/java/org/cliffc/high_scale_lib/ConcurrentAutoTable.java
     case catch ets:update_counter(?TABLE, Key, Incr) of
         {'EXIT', {badarg, _}} ->
             ets:insert(?TABLE, {Key, Incr}),
@@ -74,7 +78,8 @@ counter_test_() ->
      fun setup/0, fun teardown/1,
      [
       ?_test(test_operations()),
-      ?_test(find_counters())
+      ?_test(find_counters()),
+      ?_test(benchmark())
      ]
     }.
 
@@ -113,3 +118,34 @@ find_counters() ->
     ?assertEqual(ok, incr(bar)),
     ?assertEqual(lists:sort([bar, foo]), lists:sort(counters())),
     ?assertEqual(lists:sort([{bar, 1}, {foo, 1}]), lists:sort(get_all())).
+
+benchmark() ->
+    do_benchmark(4, 100000),
+    do_benchmark(8, 100000),
+    do_benchmark(32, 100000).
+
+do_benchmark(Processes, Writes) ->
+    Start = now(),
+    Parent = self(),
+    Pids = [spawn(fun() ->
+                          benchmark_incrementer(foo, Writes),
+                          Parent ! {self(), done}
+                  end) || _ <- lists:seq(1, Processes)],
+    receive_all(Pids, done),
+    error_logger:info_msg("~p processes, ~p writes in ~p ms~n",
+                          [Processes, Writes, timer:now_diff(now(), Start) / 1000]),
+    ok.
+
+receive_all([], _) ->
+    ok;
+receive_all(Pids, Msg) ->
+    receive
+        {Pid, Msg} ->
+            receive_all(lists:delete(Pid, Pids), Msg)
+    end.
+
+benchmark_incrementer(_, 0) ->
+    ok;
+benchmark_incrementer(Key, N) ->
+    incr(Key),
+    benchmark_incrementer(Key, N-1).
