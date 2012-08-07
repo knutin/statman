@@ -1,5 +1,6 @@
 -module(statman_gauge).
--export([init/0, set/2, expire/0, get_all/0]).
+-export([init/0, expire/0, get_all/0]).
+-export([set/2, incr/1, incr/2, decr/1, decr/2]).
 -include_lib("eunit/include/eunit.hrl").
 
 -define(TABLE, statman_gauges).
@@ -14,6 +15,21 @@ set(Key, Value) when is_integer(Value) orelse is_float(Value) ->
 set(Key, Value, Timestamp) ->
     ets:insert(?TABLE, {Key, Timestamp, Value}),
     ok.
+
+incr(Key) -> incr(Key, 1).
+
+decr(Key) -> incr(Key, -1).
+decr(Key, Decr) -> incr(Key, -Decr).
+
+
+incr(Key, Incr) ->
+    case catch ets:update_counter(?TABLE, Key, {3, Incr}) of
+        {'EXIT', {badarg, _}} ->
+            ets:insert(?TABLE, {Key, Incr}),
+            ok;
+        _ ->
+            ok
+    end.
 
 expire() ->
     expire(now_to_seconds() - 60).
@@ -37,7 +53,8 @@ gauge_test_() ->
     {foreach,
      fun setup/0, fun teardown/1,
      [
-      ?_test(test_expire())
+      ?_test(test_expire()),
+      ?_test(test_set_incr())
      ]
     }.
 
@@ -56,3 +73,13 @@ test_expire() ->
     ?assertEqual(0, expire(now_to_seconds() - 5)),
     ?assertEqual(1, expire(now_to_seconds() - 0)),
     ?assertEqual([], get_all()).
+
+
+test_set_incr() ->
+    set(foo, 10),
+    incr(foo),
+    incr(foo),
+    ?assertEqual([{foo, 12}], get_all()),
+
+    decr(foo),
+    ?assertEqual([{foo, 11}], get_all()).
