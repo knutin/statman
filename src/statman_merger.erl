@@ -130,9 +130,9 @@ example_nodedata(Name) ->
 
 report_test() ->
     {ok, Init} = init([]),
-    {noreply, S1} = handle_cast({statman_update, example_nodedata(foo)}, Init),
-    {noreply, S2} = handle_cast({statman_update, example_nodedata(bar)}, S1),
-    {noreply, S3} = handle_cast({statman_update, example_nodedata(quux)}, S2),
+    {noreply, S1} = handle_cast({statman_update, [example_nodedata(foo)]}, Init),
+    {noreply, S2} = handle_cast({statman_update, [example_nodedata(bar)]}, S1),
+    {noreply, S3} = handle_cast({statman_update, [example_nodedata(quux)]}, S2),
 
     ?assertEqual([{histograms, [{{foo, bar},
                                  [{1,3}, {2,3}, {3,3}]}]},
