@@ -119,13 +119,13 @@ example_nodedata(Name) ->
               {{messaging,messages_in_queue},19,19},
               {{messaging,processes_with_queues},19,19}]}].
 
-%% merge_test() ->
-%%     ?assertEqual([{histograms, [{{foo, bar},
-%%                                  [{1,2}, {2,2}, {3,2}]}]},
-%%                   {nodes, [node1, node2]}],
-%%                  merge(orddict:from_list(
-%%                          [{node1, example_nodedata(node1)},
-%%                           {node2, example_nodedata(node2)}]))).
+merge_test() ->
+    ?assertEqual([{histograms, [{{foo, bar},
+                                 [{1,2}, {2,2}, {3,2}]}]},
+                  {nodes, [node2, node1]}],
+                 merge(orddict:from_list(
+                         [{node1, example_nodedata(node1)},
+                          {node2, example_nodedata(node2)}]))).
 
 
 report_test() ->
