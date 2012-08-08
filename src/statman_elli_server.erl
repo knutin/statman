@@ -32,26 +32,21 @@ init([]) ->
 handle_call({add_client, Ref}, _From, #state{clients = Clients} = State) ->
     {reply, ok, State#state{clients = [Ref | Clients]}}.
 
-handle_cast({statman_update, Updates}, State) ->
-    Json = lists:map(fun (Update) ->
-                             {[{node, {[{name, get_node(Update)},
-                                        {rates, rates(Update)},
-                                        {histograms, histograms(Update)},
-                                        {gauges, gauges(Update)}]}}]}
-                     end, Updates),
-    Chunk = ["data: ", jiffy:encode({[{nodes, Json}]}), "\n\n"],
-    NewClients = notify_subscribers(State#state.clients, Chunk),
-
-    {noreply, State#state{clients = NewClients}};
-
-handle_cast({statman_merged, Stats}, State) ->
-    Json = {[{merge, {[{nodes, proplists:get_value(nodes, Stats, [])},
-                       {histograms, histograms(Stats)}]}}]},
-
-    Chunk = ["data:", jiffy:encode(Json), "\n\n"],
+handle_cast({statman_update, Metrics}, State) ->
+    Json = lists:flatmap(fun metric2stats/1, Metrics),
+    Chunk = ["data: ", jiffy:encode({[{metrics, Json}]}), "\n\n"],
     NewClients = notify_subscribers(State#state.clients, Chunk),
 
     {noreply, State#state{clients = NewClients}}.
+
+%% handle_cast({statman_merged, Stats}, State) ->
+%%     Json = {[{merge, {[{nodes, proplists:get_value(nodes, Stats, [])},
+%%                        {histograms, histograms(Stats)}]}}]},
+
+%%     Chunk = ["data:", jiffy:encode(Json), "\n\n"],
+%%     NewClients = notify_subscribers(State#state.clients, Chunk),
+
+%%     {noreply, State#state{clients = NewClients}}.
 
 
 handle_info(_, State) ->
@@ -80,26 +75,53 @@ notify_subscribers(Subscribers, Chunk) ->
               end
       end, Subscribers).
 
-window(Stats) ->
-    proplists:get_value(window, Stats, 1000) / 1000.
+window(Metric) ->
+    proplists:get_value(window, Metric, 1000) / 1000.
 
-get_node(Stats) ->
-    list_to_binary(atom_to_list(proplists:get_value(node, Stats))).
+value(Metric) ->
+    proplists:get_value(value, Metric).
 
-rates(Stats) ->
-    Node = proplists:get_value(node, Stats),
-    lists:flatmap(fun ({FullKey, Count}) ->
-                          {Id, Key} = id_key(FullKey),
-                          case Count - prev_count({Node, FullKey}) of
-                              0 ->
-                                  ets:insert(?COUNTERS_TABLE, {{Node, FullKey}, Count}),
-                                  [];
-                              Delta ->
-                                  ets:insert(?COUNTERS_TABLE, {{Node, FullKey}, Count}),
-                                  [{[{id, Id}, {key, Key},
-                                     {rate, Delta / window(Stats)}]}]
-                          end
-                  end, proplists:get_value(counters, Stats, [])).
+get_node(Metric) ->
+    proplists:get_value(node, Metric).
+
+
+
+metric2stats(Metric) ->
+    case proplists:get_value(type, Metric) of
+        histogram ->
+            {Id, Key} = id_key(Metric),
+            Summary = statman_histogram:summary(value(Metric)),
+            Num = proplists:get_value(observations, Summary, 0),
+            [{[
+               {id, Id}, {key, Key},
+               {type, histogram},
+               {rate, Num / window(Metric)},
+               {node, get_node(Metric)}
+               | Summary]}];
+        counter ->
+            {Id, Key} = id_key(Metric),
+            CounterKey = {get_node(Metric), id_key(Metric)},
+            Prev = prev_count(CounterKey),
+
+            case value(Metric) - Prev of
+                0 ->
+                    ets:insert(?COUNTERS_TABLE, {CounterKey, value(Metric)}),
+                    [];
+                Delta ->
+                    ets:insert(?COUNTERS_TABLE, {CounterKey, value(Metric)}),
+                    [{[{id, Id}, {key, Key},
+                       {type, counter},
+                       {node, get_node(Metric)},
+                       {rate, Delta / window(Metric)}]}]
+            end;
+        gauge ->
+            {Id, Key} = id_key(Metric),
+            [{[{id, Id}, {key, Key},
+               {type, gauge},
+               {node, get_node(Metric)},
+               {value, value(Metric)}]}]
+    end.
+
 
 prev_count(Key) ->
     case ets:lookup(?COUNTERS_TABLE, Key) of
@@ -109,24 +131,8 @@ prev_count(Key) ->
             0
     end.
 
-histograms(Stats) ->
-    lists:flatmap(fun ({FullKey, Raw}) ->
-                          {Id, Key} = id_key(FullKey),
-                          case statman_histogram:summary(Raw) of
-                              [] ->
-                                  [];
-                              Summary ->
-                                  Num = proplists:get_value(observations, Summary, 0),
-                                  [{[{id, Id}, {key, Key}, {rate, Num / window(Stats)}
-                                     | Summary]}]
-                          end
-              end, proplists:get_value(histograms, Stats, [])).
-
-gauges(Stats) ->
-    lists:map(fun ({FullKey, Value}) ->
-                      {Id, Key} = id_key(FullKey),
-                      {[{id, Id}, {key, Key}, {value, Value}]}
-              end, proplists:get_value(gauges, Stats, [])).
-
-id_key({Id, Key}) -> {Id, Key};
-id_key(Key) -> {null, Key}.
+id_key(Metric) ->
+    case proplists:get_value(key, Metric) of
+        {Id, Key} -> {Id, Key};
+        Key -> {null, Key}
+    end.

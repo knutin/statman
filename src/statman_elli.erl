@@ -59,11 +59,19 @@ valid_path(Path) ->
 
 example_logger() ->
     Fun = fun(F) ->
+                  random:seed(erlang:now()),
                   timer:sleep(random:uniform(50)),
                   statman_counter:incr({http, hits}),
                   statman_counter:incr({db, hits}, 20),
                   statman_gauge:set({db, connections}, random:uniform(10)),
                   statman_gauge:set(runners, random:uniform(10)),
+
+                  case node() of
+                      'a@vm' ->
+                          statman_counter:incr({node_a, foo});
+                      'b@vm'  ->
+                          statman_counter:incr({node_b, foo})
+                  end,
 
                   statman_histogram:record_value(
                     {<<"/highscores">>, db_a_latency}, random:uniform(30)),
@@ -106,6 +114,7 @@ start_demo() ->
     A = setup(a),
     B = setup(b),
 
+    rscope:init(),
     statman_elli_server:start_link(),
     statman_merger:start_link(),
 

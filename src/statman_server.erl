@@ -52,15 +52,10 @@ handle_call({remove_subscriber, Ref}, _From, #state{subscribers = Sub} = State) 
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info(report, State) ->
+handle_info(report, #state{report_interval = Window} = State) ->
     erlang:send_after(State#state.report_interval, self(), report),
 
-    Stats = [[{node, node()},
-              {window, State#state.report_interval},
-              {counters, counters()},
-              {histograms, histograms()},
-              {gauges, gauges()}]],
-
+    Stats = counters(Window) ++ histograms(Window) ++ gauges(Window),
     lists:foreach(fun (S) ->
                           gen_server:cast(S, {statman_update, Stats})
                   end, State#state.subscribers),
@@ -77,19 +72,24 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-counters() ->
-    statman_counter:get_all().
+counters(Window) ->
+    lists:map(fun ({K, V}) ->
+                      [{key, K}, {node, node()}, {type, counter},
+                       {value, V}, {window, Window}]
+              end, statman_counter:get_all()).
 
-histograms() ->
+histograms(Window) ->
     lists:map(fun (Key) ->
                       Data = statman_histogram:get_data(Key),
                       statman_histogram:reset(Key, Data),
-                      {Key, Data}
+                      [{key, Key}, {node, node()}, {type, histogram},
+                       {value, Data}, {window, Window}]
               end, statman_histogram:keys()).
 
-gauges() ->
+gauges(Window) ->
     statman_gauge:expire(),
     lists:map(fun ({Key, Value}) ->
-                      {Key, Value}
+                      [{key, Key}, {node, node()}, {type, gauge},
+                       {value, Value}, {window, Window}]
               end, statman_gauge:get_all()).
 
