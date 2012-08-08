@@ -117,7 +117,7 @@ start_demo() ->
     rscope:init(),
     statman_elli_server:start_link(),
     statman_merger:start_link(),
-
+    statman_aggregator:start_link(),
 
     ok = rpc:call(A, statman_server, add_subscriber, [{statman_merger, node()}]),
     ok = rpc:call(B, statman_server, add_subscriber, [{statman_merger, node()}]),
@@ -125,6 +125,7 @@ start_demo() ->
     rpc:call(B, statman_gauge_poller, start_link, []),
 
     statman_merger:add_subscriber(statman_elli_server),
+    statman_merger:add_subscriber(statman_aggregator),
 
     %% statman_gauge_poller:start_link(),
 
