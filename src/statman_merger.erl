@@ -44,35 +44,21 @@ handle_call({remove_subscriber, Ref}, _From, #state{subscribers = Sub} = State) 
 
 
 handle_cast({statman_update, Updates}, #state{metrics = Metrics} = State) ->
-    %%error_logger:info_msg("merger got ~p~n", [Updates]),
-
     NewMetrics = lists:foldl(fun (Update, Acc) ->
                                      Key = {proplists:get_value(node, Update),
                                             proplists:get_value(key, Update)},
                                      orddict:store(Key, Update, Acc)
                              end, Metrics, Updates),
 
-    %% Histograms = lists:flatmap(fun (Update) ->
-    %%                                    proplists:get_value(histograms, Update)
-    %%                            end, Updates),
-
-    %% NewSlots = lists:foldl(fun ({K, V}, Acc) ->
-    %%                                orddict:store(K, V, Acc)
-    %%                        end, Slots, Histograms),
-
     {noreply, State#state{metrics = NewMetrics}}.
 
 handle_info(report, State) ->
     erlang:send_after(1000, self(), report),
-
-    %% error_logger:info_msg("slots: ~p~n", [State#state.slots]),
     Merged = merge(State#state.metrics),
 
     KeyedMetrics = Merged ++ orddict:to_list(State#state.metrics),
     {_, Metrics} = lists:unzip(KeyedMetrics),
 
-    %% error_logger:info_msg("merged: ~p~n", [Merged]),
-    %% Updates = lists:map(fun ({_, Update}) -> Update end, State#state.slots),
     lists:foreach(fun (S) ->
                           gen_server:cast(S, {statman_update, Metrics})
                   end, State#state.subscribers),
