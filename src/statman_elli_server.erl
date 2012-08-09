@@ -92,28 +92,28 @@ metric2stats(Metric) ->
             {Id, Key} = id_key(Metric),
             Summary = statman_histogram:summary(value(Metric)),
             Num = proplists:get_value(observations, Summary, 0),
-            [{[
-               {id, Id}, {key, Key},
-               {type, histogram},
-               {rate, Num / window(Metric)},
-               {node, get_node(Metric)}
-               | Summary]}];
+            case Num of
+                0 ->
+                    [];
+                _ ->
+                    [{[
+                       {id, Id}, {key, Key},
+                       {type, histogram},
+                       {rate, Num / window(Metric)},
+                       {node, get_node(Metric)}
+                       | Summary]}]
+            end;
         counter ->
             {Id, Key} = id_key(Metric),
             CounterKey = {get_node(Metric), id_key(Metric)},
             Prev = prev_count(CounterKey),
 
-            case value(Metric) - Prev of
-                0 ->
-                    ets:insert(?COUNTERS_TABLE, {CounterKey, value(Metric)}),
-                    [];
-                Delta ->
-                    ets:insert(?COUNTERS_TABLE, {CounterKey, value(Metric)}),
-                    [{[{id, Id}, {key, Key},
-                       {type, counter},
-                       {node, get_node(Metric)},
-                       {rate, Delta / window(Metric)}]}]
-            end;
+            Delta = value(Metric) - Prev,
+            ets:insert(?COUNTERS_TABLE, {CounterKey, value(Metric)}),
+            [{[{id, Id}, {key, Key},
+               {type, counter},
+               {node, get_node(Metric)},
+               {rate, Delta / window(Metric)}]}];
         gauge ->
             {Id, Key} = id_key(Metric),
             [{[{id, Id}, {key, Key},
