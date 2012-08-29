@@ -66,12 +66,7 @@ example_logger() ->
                   statman_gauge:set({db, connections}, random:uniform(10)),
                   statman_gauge:set(runners, random:uniform(10)),
 
-                  case node() of
-                      'a@vm' ->
-                          statman_counter:incr({node_a, foo});
-                      'b@vm'  ->
-                          statman_counter:incr({node_b, foo})
-                  end,
+                  statman_counter:incr({node(), foo}),
 
                   statman_histogram:record_value(
                     {<<"/highscores">>, db_a_latency}, random:uniform(30)),
@@ -119,13 +114,13 @@ start_demo() ->
     statman_merger:start_link(),
     statman_aggregator:start_link(),
 
-    ok = rpc:call(A, statman_server, add_subscriber, [{statman_merger, node()}]),
-    ok = rpc:call(B, statman_server, add_subscriber, [{statman_merger, node()}]),
+    ok = rpc:call(A, statman_server, add_subscriber, [{statman_aggregator, node()}]),
+    ok = rpc:call(B, statman_server, add_subscriber, [{statman_aggregator, node()}]),
     rpc:call(A, statman_gauge_poller, start_link, []),
     rpc:call(B, statman_gauge_poller, start_link, []),
 
-    statman_merger:add_subscriber(statman_elli_server),
-    statman_merger:add_subscriber(statman_aggregator),
+    %% statman_merger:add_subscriber(statman_elli_server),
+    %% statman_merger:add_subscriber(statman_aggregator),
 
     %% statman_gauge_poller:start_link(),
 

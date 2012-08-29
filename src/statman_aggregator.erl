@@ -10,7 +10,11 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--record(state, {timeseries = []}).
+-record(state, {
+          timeseries = [],
+          last_sample = [],
+          nodes = []
+         }).
 -define(COUNTERS_TABLE, statman_aggregator_counters).
 
 %%%===================================================================
@@ -31,9 +35,21 @@ init([]) ->
 handle_call(_, _From, State) ->
     {reply, ok, State}.
 
-handle_cast({statman_update, Metrics}, #state{timeseries = TimeSeries} = State) ->
-    NewTimeSeries = [{os:timestamp(), Metrics} | TimeSeries],
-    {noreply, State#state{timeseries = NewTimeSeries}}.
+handle_cast({statman_update, Metrics}, #state{nodes = Nodes} = State) ->
+    io:format("aggregator got update~n"),
+    Now = now_to_seconds(),
+    NewNodes = lists:foldl(
+                 fun (Metric, N) ->
+                         case orddict:find(get_node(Metric), N) of
+                             {ok, Samples} ->
+                                 NewSamples = setelement(Now rem 300, Samples, Metric),
+                                 orddict:store(get_node(Metric), NewSamples, N);
+                             error ->
+                                 Samples = setelement(Now rem 300, erlang:make_tuple(300, undefined), Metric),
+                                 orddict:store(get_node(Metric), Samples, N)
+                         end
+                 end, Nodes, Metrics),
+    {noreply, State#state{nodes = NewNodes}}.
 
 handle_info(_, State) ->
     {noreply, State}.
@@ -85,6 +101,7 @@ merge(MetricA, MetricB) ->
 
 
 type(Metric) -> proplists:get_value(type, Metric).
+get_node(Metric) -> proplists:get_value(node, Metric).
 
 key(Metric) ->
     {proplists:get_value(node, Metric),
@@ -141,3 +158,7 @@ aggregate_test() ->
     %% purge
 
     ?assertEqual([], merge(S1#state.timeseries)).
+
+now_to_seconds() ->
+    {MegaSeconds, Seconds, _} = now(),
+    MegaSeconds * 1000000 + Seconds.

@@ -1,4 +1,4 @@
-# statman - super statistics
+# statman - Statistics man to the rescue!
 
 `statman` lets you to add a metric ton of instrumentation to your
 Erlang code without worrying. You won't overload any processes, use

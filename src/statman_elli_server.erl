@@ -35,9 +35,9 @@ handle_call({add_client, Ref}, _From, #state{clients = Clients} = State) ->
 handle_cast({statman_update, Metrics}, State) ->
     Json = lists:flatmap(fun metric2stats/1, Metrics),
     Chunk = ["data: ", jiffy:encode({[{metrics, Json}]}), "\n\n"],
-    NewClients = notify_subscribers(State#state.clients, Chunk),
+    %% NewClients = notify_subscribers(State#state.clients, Chunk),
 
-    {noreply, State#state{clients = NewClients}}.
+    {noreply, State}.
 
 %% handle_cast({statman_merged, Stats}, State) ->
 %%     Json = {[{merge, {[{nodes, proplists:get_value(nodes, Stats, [])},
