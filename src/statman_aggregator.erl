@@ -111,7 +111,7 @@ merged(Metrics) ->
                               end
                       end
               end, orddict:new(), Metrics))),
-    Merged ++ Metrics.
+    Merged.
 
 do_merge(Type, Left, Right) ->
     orddict:merge(
