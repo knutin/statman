@@ -27,30 +27,23 @@ add_client(Ref) ->
 
 init([]) ->
     ets:new(?COUNTERS_TABLE, [named_table, protected, set]),
+    timer:send_interval(10000, pull),
     {ok, #state{clients = []}}.
 
 handle_call({add_client, Ref}, _From, #state{clients = Clients} = State) ->
+    io:format("adding client: ~p~n", [Ref]),
     {reply, ok, State#state{clients = [Ref | Clients]}}.
 
-handle_cast({statman_update, Metrics}, State) ->
+handle_cast(_, State) ->
+    {noreply, State}.
+
+handle_info(pull, State) ->
+    {ok, Metrics} = statman_aggregator:get_window(10),
     Json = lists:flatmap(fun metric2stats/1, Metrics),
     Chunk = ["data: ", jiffy:encode({[{metrics, Json}]}), "\n\n"],
-    %% NewClients = notify_subscribers(State#state.clients, Chunk),
+    NewClients = notify_subscribers(State#state.clients, Chunk),
 
-    {noreply, State}.
-
-%% handle_cast({statman_merged, Stats}, State) ->
-%%     Json = {[{merge, {[{nodes, proplists:get_value(nodes, Stats, [])},
-%%                        {histograms, histograms(Stats)}]}}]},
-
-%%     Chunk = ["data:", jiffy:encode(Json), "\n\n"],
-%%     NewClients = notify_subscribers(State#state.clients, Chunk),
-
-%%     {noreply, State#state{clients = NewClients}}.
-
-
-handle_info(_, State) ->
-    {noreply, State}.
+    {noreply, State#state{clients = NewClients}}.
 
 terminate(_Reason, _State) ->
     ok.
@@ -69,6 +62,7 @@ notify_subscribers(Subscribers, Chunk) ->
                   ok ->
                       [Sub];
                   {error, closed} ->
+                      elli_request:send_chunk(Sub, <<"">>),
                       [];
                   {error, timeout} ->
                       []

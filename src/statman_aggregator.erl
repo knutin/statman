@@ -1,17 +1,15 @@
 -module(statman_aggregator).
 -behaviour(gen_server).
 
--export([start_link/0]).
+-export([start_link/0, get_window/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--export([merge/1, example_data/0]).
-
 -include_lib("eunit/include/eunit.hrl").
 
 -record(state, {
-          timeseries = [],
+          subscribers = [],
           last_sample = [],
           nodes = []
          }).
@@ -24,30 +22,44 @@
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
+get_window(Size) ->
+    gen_server:call(?MODULE, {get_window, Size}).
+
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
 
 init([]) ->
     ets:new(?COUNTERS_TABLE, [named_table, protected, set]),
+    timer:send_interval(10000, push),
     {ok, #state{}}.
 
-handle_call(_, _From, State) ->
-    {reply, ok, State}.
+handle_call({add_subscriber, Ref}, _From, #state{subscribers = Sub} = State) ->
+    {reply, ok, State#state{subscribers = [Ref | Sub]}};
+handle_call({remove_subscriber, Ref}, _From, #state{subscribers = Sub} = State) ->
+    {reply, ok, State#state{subscribers = lists:delete(Ref, Sub)}};
+
+handle_call({get_window, Size}, _From, State) ->
+    {reply, {ok, merged(window(Size, State#state.nodes))}, State}.
+
+
 
 handle_cast({statman_update, Metrics}, #state{nodes = Nodes} = State) ->
-    io:format("aggregator got update~n"),
     Now = now_to_seconds(),
     NewNodes = lists:foldl(
                  fun (Metric, N) ->
-                         case orddict:find(get_node(Metric), N) of
-                             {ok, Samples} ->
-                                 NewSamples = setelement(Now rem 300, Samples, Metric),
-                                 orddict:store(get_node(Metric), NewSamples, N);
-                             error ->
-                                 Samples = setelement(Now rem 300, erlang:make_tuple(300, undefined), Metric),
-                                 orddict:store(get_node(Metric), Samples, N)
-                         end
+                         NewNode = case orddict:find(nodekey(Metric), N) of
+                                          {ok, {Type, Samples}} ->
+                                              {Type, setelement((Now rem 300) + 1, Samples, value(Metric))};
+                                          error ->
+                                           {type(Metric),
+                                            setelement((Now rem 300) + 1,
+                                                       erlang:make_tuple(300, []),
+                                                       value(Metric))}
+                                      end,
+
+                         orddict:store(nodekey(Metric), NewNode, N)
                  end, Nodes, Metrics),
     {noreply, State#state{nodes = NewNodes}}.
 
@@ -64,100 +76,104 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-%% @doc: Merge histograms with the same key and node together. For
-%% counters and gauges, we just keep the last value.
-merge(TimeSeries) ->
-    Metrics = lists:flatmap(fun ({_, Ms}) ->
-                                    Ms
-                            end, TimeSeries),
-    lists:foldl(fun (Metric, Acc) ->
-                        case type(Metric) of
-                            histogram ->
-                                case orddict:find(key(Metric), Acc) of
-                                    {ok, Existing} ->
-                                        orddict:store(key(Metric),
-                                                      merge(Metric, Existing), Acc);
-                                    error ->
-                                        orddict:store(key(Metric), Metric, Acc)
-                                end;
-                            gauge ->
-                                orddict:store(key(Metric), Metric, Acc);
-                            counter ->
-                                orddict:store(key(Metric), Metric, Acc)
-                        end
-                end, orddict:new(), Metrics).
+
+window(Size, Nodes) ->
+    Now = now_to_seconds(),
+    lists:map(fun ({{Node, Key}, {Type, AllSamples}}) ->
+                      StartIndex = (Now - 10) rem 300 + 1,
+                      EndIndex = (Now rem 300) + 1,
+                      Samples = get_samples(StartIndex, EndIndex, AllSamples),
+
+                      [{node, Node},
+                       {key, Key},
+                       {value, merge_samples(Type, Samples)},
+                       {type, Type},
+                       {window, Size * 1000}]
+              end, orddict:to_list(Nodes)).
 
 
-merge(MetricA, MetricB) ->
-    Values = orddict:merge(fun (_, A, B) ->
-                                   A + B
-                           end,
-                           orddict:from_list(
-                             proplists:get_value(value, MetricA)),
-                           orddict:from_list(
-                             proplists:get_value(value, MetricB))),
+merged(Metrics) ->
+    {_, Merged} =
+        lists:unzip(
+          orddict:to_list(
+            lists:foldl(
+              fun (Metric, Acc) ->
+                      case type(Metric) of
+                          gauge ->
+                              orddict:store(key(Metric), Metric, Acc);
+                          Type ->
+                              case orddict:find(key(Metric), Acc) of
+                                  {ok, OtherMetric} ->
+                                      Merged = do_merge(Type, Metric, OtherMetric),
+                                      orddict:store(key(Metric), Merged, Acc);
+                                  error ->
+                                      orddict:store(key(Metric), Metric, Acc)
+                              end
+                      end
+              end, orddict:new(), Metrics))),
+    Merged ++ Metrics.
 
-    lists:keyreplace(value, 1, MetricA, {value, Values}).
+do_merge(Type, Left, Right) ->
+    orddict:merge(
+      fun (node, A, Nodes) when is_list(Nodes) ->
+              [A | Nodes];
+          (node, A, B) ->
+              [A, B];
+          (value, A, B) ->
+              case Type of
+                  histogram ->
+                      orddict:merge(fun (_Key, ValueLeft, ValueRight) ->
+                                            ValueLeft + ValueRight
+                                    end, A, B);
+                  counter ->
+                      A + B
+              end;
+          (_Other, A, _) ->
+              A
+      end,
+      Left, Right).
 
 
-type(Metric) -> proplists:get_value(type, Metric).
-get_node(Metric) -> proplists:get_value(node, Metric).
+get_samples(Start, End, Samples) when Start > End ->
+    lists:map(fun (I) -> element(I, Samples) end,
+              lists:seq(Start, 300) ++ lists:seq(1, End));
+get_samples(Start, End, Samples) ->
+    lists:map(fun (I) -> element(I, Samples) end,
+              lists:seq(Start, End)).
 
-key(Metric) ->
+
+
+
+merge_samples(histogram, Samples) ->
+    lists:foldl(fun (Sample, Agg) ->
+                        orddict:merge(fun (_, A, B) ->
+                                              A + B
+                                      end,
+                                      orddict:from_list(Sample),
+                                      Agg)
+                end, orddict:new(), Samples);
+
+merge_samples(counter, Samples) ->
+    lists:sum([S || S <- Samples, S =/= []]);
+
+merge_samples(gauge, Samples) ->
+    lists:last(
+      lists:filter(fun ([]) -> false;
+                       (_)  -> true
+                   end, Samples)).
+
+
+
+
+
+type(Metric)  -> proplists:get_value(type, Metric).
+value(Metric) -> proplists:get_value(value, Metric).
+key(Metric)   -> proplists:get_value(key, Metric).
+
+nodekey(Metric) ->
     {proplists:get_value(node, Metric),
      proplists:get_value(key, Metric)}.
 
-example_data() ->
-    [
-     [{key,{<<"/highscores">>,db_a_latency}},
-      {node,[b@vm,a@vm]},
-      {type,histogram},
-      {value,[{1,2},
-              {2,5},
-              {3,1}]},
-      {window,1000}],
-
-    [{key,{<<"/highscores">>,db_b_latency}},
-     {node,[b@vm,a@vm]},
-     {type,histogram},
-     {value,[{1,4},
-             {2,2},
-             {3,2}]},
-     {window,1000}],
-
-     [{key,{db,hits}},
-      {node,a@vm},
-      {type,counter},
-      {value,3100},
-      {window,1000}],
-
-     [{key,{http,hits}},
-      {node,a@vm},
-      {type,counter},
-      {value,155},
-      {window,1000}],
-
-     [{key,{node_a,foo}},
-      {node,a@vm},
-      {type,counter},
-      {value,155},
-      {window,1000}]
-    ].
-
-
-aggregate_test() ->
-    {ok, S0} = init([]),
-
-    S1 = lists:foldl(fun (_, Acc) ->
-                             {noreply, NewAcc} = handle_cast(
-                                                   {statman_update, example_data()},
-                                                   Acc),
-                             NewAcc
-                     end, S0, lists:seq(1, 3)),
-
-    %% purge
-
-    ?assertEqual([], merge(S1#state.timeseries)).
 
 now_to_seconds() ->
     {MegaSeconds, Seconds, _} = now(),

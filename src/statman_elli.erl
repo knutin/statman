@@ -124,6 +124,7 @@ start_demo() ->
 
     %% statman_gauge_poller:start_link(),
 
+
     elli:start_link([{callback, elli_middleware}, {callback_args, Config}]),
 
     ok.
