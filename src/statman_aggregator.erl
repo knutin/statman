@@ -98,18 +98,20 @@ merged(Metrics) ->
           orddict:to_list(
             lists:foldl(
               fun (Metric, Acc) ->
-                      case type(Metric) of
-                          gauge ->
-                              orddict:store(key(Metric), Metric, Acc);
-                          Type ->
-                              case orddict:find(key(Metric), Acc) of
-                                  {ok, OtherMetric} ->
-                                      Merged = do_merge(Type, Metric, OtherMetric),
-                                      orddict:store(key(Metric), Merged, Acc);
-                                  error ->
-                                      orddict:store(key(Metric), Metric, Acc)
-                              end
-                      end
+                      Type = type(Metric),
+                      NewAcc = case type(Metric) of
+                                   gauge ->
+                                       Acc;
+                                   Type ->
+                                       case orddict:find(key(Metric), Acc) of
+                                           {ok, OtherMetric} ->
+                                               Merged = do_merge(Type, Metric, OtherMetric),
+                                               orddict:store(key(Metric), Merged, Acc);
+                                           error ->
+                                               orddict:store(key(Metric), Metric, Acc)
+                                       end
+                               end,
+                      orddict:store(nodekey(Metric), Metric, NewAcc)
               end, orddict:new(), Metrics))),
     Merged.
 
