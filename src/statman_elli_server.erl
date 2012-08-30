@@ -38,12 +38,16 @@ handle_cast(_, State) ->
     {noreply, State}.
 
 handle_info(pull, State) ->
-    {ok, Metrics} = statman_aggregator:get_window(10),
-    Json = lists:flatmap(fun metric2stats/1, Metrics),
-    Chunk = ["data: ", jiffy:encode({[{metrics, Json}]}), "\n\n"],
-    NewClients = notify_subscribers(State#state.clients, Chunk),
+    case catch statman_aggregator:get_window(10) of
+        {ok, Metrics} ->
+            Json = lists:flatmap(fun metric2stats/1, Metrics),
+            Chunk = ["data: ", jiffy:encode({[{metrics, Json}]}), "\n\n"],
+            NewClients = notify_subscribers(State#state.clients, Chunk),
 
-    {noreply, State#state{clients = NewClients}}.
+            {noreply, State#state{clients = NewClients}};
+        {'EXIT', _} ->
+            {noreply, State}
+    end.
 
 terminate(_Reason, _State) ->
     ok.
