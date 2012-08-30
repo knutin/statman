@@ -113,7 +113,9 @@ merged(Metrics) ->
                                end,
                       orddict:store(nodekey(Metric), Metric, NewAcc)
               end, orddict:new(), Metrics))),
-    Merged.
+
+    lists:filter(fun (Metric) -> is_list(proplists:get_value(node, Metric)) end, Merged)
+        ++ Metrics.
 
 do_merge(Type, Left, Right) ->
     orddict:merge(
