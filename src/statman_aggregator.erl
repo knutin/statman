@@ -143,10 +143,14 @@ merge_samples(counter, Samples) ->
     lists:sum(Samples);
 
 merge_samples(gauge, Samples) ->
-    lists:last(
-      lists:filter(fun ([]) -> false;
-                       (_)  -> true
-                   end, Samples)).
+    Data =  lists:filter(fun ([]) -> false;
+                                 (_)  -> true
+                             end, Samples),
+    case Data of
+        [] -> 0;
+        _ ->
+            lists:last(Data)
+    end.
 
 
 
