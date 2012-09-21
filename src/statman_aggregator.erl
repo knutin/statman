@@ -147,7 +147,7 @@ merge_samples(gauge, Samples) ->
                                  (_)  -> true
                              end, Samples),
     case Data of
-        [] -> 0;
+        [[]] -> 0;
         _ ->
             lists:last(Data)
     end.
