@@ -10,6 +10,11 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
+    application:start(sasl),
+    application:start(crypto),
+    application:start(public_key),
+    application:start(ssl),
+    application:start(lhttpc),
     statman_sup:start_link().
 
 stop(_State) ->

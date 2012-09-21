@@ -69,9 +69,25 @@ example_logger() ->
                   statman_counter:incr({node(), foo}),
 
                   statman_histogram:record_value(
-                    {<<"/highscores">>, db_a_latency}, random:uniform(30)),
+                    {<<"/highscores">>, total}, random:uniform(100) * 1000),
+
                   statman_histogram:record_value(
-                    {<<"/highscores">>, db_b_latency}, random:uniform(30)),
+                    {<<"/highscores">>, {db, highscores}}, random:uniform(30) * 1000),
+
+                  statman_histogram:record_value(
+                    {<<"/highscores">>, {db, highscores}}, random:uniform(70) * 1000),
+
+                  statman_histogram:record_value(
+                    {<<"/highscores">>, {db, highscores}}, random:uniform(90) * 1000),
+
+                  statman_histogram:record_value(
+                    {<<"/highscores">>, {http, call_user}}, random:uniform(50) * 1000),
+
+                  statman_histogram:record_value(
+                    {<<"/highscores">>, {user, call_location}}, random:uniform(20) * 1000),
+
+                  statman_histogram:record_value(
+                    {<<"/highscores">>, {location, game_logic}}, random:uniform(10) * 1000),
 
                   F(F)
           end,

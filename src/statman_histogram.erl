@@ -61,6 +61,8 @@ summary(Data) ->
      {mean, Sum / N},
      {max, Max},
      {sd, sd(N, Sum, Sum2)},
+     {sum, Sum},
+     {sum2, Sum2},
      {p95, find_quantile(Data, 0.95 * N)},
      {p99, find_quantile(Data, 0.99 * N)}
     ].

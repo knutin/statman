@@ -10,6 +10,7 @@
 
 -record(state, {clients = []}).
 -define(COUNTERS_TABLE, statman_elli_server_counters).
+-define(a2b(A), list_to_binary(atom_to_list(A))).
 
 %%%===================================================================
 %%% API
@@ -27,7 +28,7 @@ add_client(Ref) ->
 
 init([]) ->
     ets:new(?COUNTERS_TABLE, [named_table, protected, set]),
-    timer:send_interval(10000, pull),
+    timer:send_interval(1000, pull),
     {ok, #state{clients = []}}.
 
 handle_call({add_client, Ref}, _From, #state{clients = Clients} = State) ->
@@ -38,7 +39,7 @@ handle_cast(_, State) ->
     {noreply, State}.
 
 handle_info(pull, State) ->
-    case catch statman_aggregator:get_window(10) of
+    case catch statman_aggregator:get_window(1) of
         {ok, Metrics} ->
             Json = lists:flatmap(fun metric2stats/1, Metrics),
             Chunk = ["data: ", jiffy:encode({[{metrics, Json}]}), "\n\n"],
@@ -46,6 +47,7 @@ handle_info(pull, State) ->
 
             {noreply, State#state{clients = NewClients}};
         {'EXIT', _} ->
+            error_logger:info_msg("crash~n"),
             {noreply, State}
     end.
 
@@ -131,6 +133,9 @@ prev_count(Key) ->
 
 id_key(Metric) ->
     case proplists:get_value(key, Metric) of
-        {Id, Key} -> {Id, Key};
-        Key -> {null, Key}
+        {Id, Key} when is_binary(Id) -> {Id, key(Key)};
+        Key -> {null, key(Key)}
     end.
+
+key({A, B}) when is_atom(A) andalso is_atom(B) -> <<(?a2b(A))/binary, "/", (?a2b(B))/binary>>;
+key(A) when is_atom(A) -> ?a2b(A).
