@@ -137,13 +137,11 @@ id_key(Metric) ->
         Key -> {null, key(Key)}
     end.
 
-key({A, B, C}) ->
-    <<(to_binary(A))/binary, "/", (to_binary(B))/binary, "/", (to_binary(C))/binary>>;
-key({A, B}) ->
-    <<(to_binary(A))/binary, "/", (to_binary(B))/binary>>;
-key(A) ->
-    to_binary(A).
 
-to_binary(A) when is_atom(A) -> ?a2b(A);
-to_binary(B) when is_binary(B) -> B;
-to_binary(L) when is_list(L) -> list_to_binary(L).
+key({A, B}) ->
+    <<(key(A))/binary, "/", (key(B))/binary>>;
+
+key(A) when is_atom(A) ->
+    ?a2b(A);
+key(B) when is_binary(B) ->
+    B.
