@@ -46,7 +46,7 @@ counters() ->
 set(Key, Value) ->
     case catch ets:update_element(?TABLE, Key, Value) of
         {'EXIT', {badarg, _}} ->
-            ets:insert(?TABLE, {Key, Value}),
+            (catch ets:insert(?TABLE, {Key, Value})),
             ok;
         _ ->
             ok
@@ -60,7 +60,7 @@ incr(Key, Incr) ->
     %% https://github.com/boundary/high-scale-lib/blob/master/src/main/java/org/cliffc/high_scale_lib/ConcurrentAutoTable.java
     case catch ets:update_counter(?TABLE, Key, Incr) of
         {'EXIT', {badarg, _}} ->
-            ets:insert(?TABLE, {Key, Incr}),
+            (catch ets:insert(?TABLE, {Key, Incr})),
             ok;
         _ ->
             ok

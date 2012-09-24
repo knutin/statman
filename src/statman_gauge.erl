@@ -25,7 +25,7 @@ decr(Key, Decr) -> incr(Key, -Decr).
 incr(Key, Incr) ->
     case catch ets:update_counter(?TABLE, Key, {3, Incr}) of
         {'EXIT', {badarg, _}} ->
-            ets:insert(?TABLE, {Key, Incr}),
+            (catch ets:insert(?TABLE, {Key, Incr})),
             ok;
         _ ->
             ok

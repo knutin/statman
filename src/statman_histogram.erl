@@ -117,7 +117,7 @@ sd(N, Sum, Sum2) ->
 histogram_incr(Key, Incr) ->
     case catch ets:update_counter(?TABLE, Key, Incr) of
         {'EXIT', {badarg, _}} ->
-            ets:insert(?TABLE, {Key, Incr}),
+            (catch ets:insert(?TABLE, {Key, Incr})),
             ok;
         _ ->
             ok
