@@ -75,7 +75,7 @@ if len(sys.argv) == 2 and sys.argv[1] == "config":
 
         elif metric['type'] == "counter":
             print("multigraph {0}".format(md5(n)))
-            print("graph_category gums")
+            print("graph_category {0}".format(CATEGORY))
             print("graph_period minute")
             print("graph_title {0} per minute".format(n))
             print("{0}.label {0}".format(n))
