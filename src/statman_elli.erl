@@ -4,6 +4,8 @@
 -export([handle/2, handle_event/3]).
 -export([start_demo/0, example_logger/0]).
 
+-export([id_key/1]).
+
 %%
 %% ELLI CALLBACKS
 %%
@@ -16,6 +18,15 @@ handle(Req, Config) ->
         [<<"statman">>, <<"stream">>] ->
             ok = statman_elli_server:add_client(elli_request:chunk_ref(Req)),
             {chunk, [{<<"Content-Type">>, <<"text/event-stream">>}]};
+
+        [<<"statman">>, <<"raw">>] ->
+            WindowSize = list_to_integer(
+                           binary_to_list(
+                             elli_request:get_arg(<<"window">>, Req, <<"300">>))),
+            {ok, Metrics} = statman_aggregator:get_window(WindowSize),
+
+            {ok, [{<<"Content-Type">>, <<"application/json">>}],
+             jiffy:encode({[{metrics, lists:flatmap(fun metric2stats/1, Metrics)}]})};
 
         [<<"statman">>, <<"media">> | Path] ->
             Filepath = filename:join([docroot(Config) | Path]),
@@ -56,6 +67,68 @@ valid_path(Path) ->
         {_, _} -> false;
         nomatch -> true
     end.
+
+
+
+metric2stats(Metric) ->
+    case proplists:get_value(type, Metric) of
+        histogram ->
+            {Id, Key} = id_key(Metric),
+            Summary = statman_histogram:summary(value(Metric)),
+            Num = proplists:get_value(observations, Summary, 0),
+            case Num of
+                0 ->
+                    [];
+                _ ->
+                    [{[
+                       {id, Id}, {key, Key},
+                       {type, histogram},
+                       {rate, Num / window(Metric)},
+                       {node, get_node(Metric)}
+                       | Summary]}]
+            end;
+        counter ->
+            {Id, Key} = id_key(Metric),
+
+            [{[{id, Id}, {key, Key},
+               {type, counter},
+               {node, get_node(Metric)},
+               {value, value(Metric)}]}];
+        gauge ->
+            {Id, Key} = id_key(Metric),
+            [{[{id, Id}, {key, Key},
+               {type, gauge},
+               {node, get_node(Metric)},
+               {value, value(Metric)}]}]
+    end.
+
+
+
+id_key(Metric) ->
+    case proplists:get_value(key, Metric) of
+        {Id, Key} when is_binary(Id) -> {Id, key(Key)};
+        Key -> {null, key(Key)}
+    end.
+
+
+key({A, B}) ->
+    <<(key(A))/binary, "/", (key(B))/binary>>;
+
+key(A) when is_atom(A) ->
+    atom_to_binary(A, utf8);
+key(B) when is_binary(B) ->
+    B.
+
+
+window(Metric) ->
+    proplists:get_value(window, Metric, 1000) / 1000.
+
+value(Metric) ->
+    proplists:get_value(value, Metric).
+
+get_node(Metric) ->
+    proplists:get_value(node, Metric).
+
 
 example_logger() ->
     Fun = fun(F) ->

@@ -63,8 +63,11 @@ summary(Data) ->
      {sd, sd(N, Sum, Sum2)},
      {sum, Sum},
      {sum2, Sum2},
+     {p25, find_quantile(Data, 0.99 * N)},
+     {p75, find_quantile(Data, 0.99 * N)},
      {p95, find_quantile(Data, 0.95 * N)},
-     {p99, find_quantile(Data, 0.99 * N)}
+     {p99, find_quantile(Data, 0.99 * N)},
+     {p999, find_quantile(Data, 0.999 * N)}
     ].
 
 

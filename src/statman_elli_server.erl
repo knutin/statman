@@ -89,7 +89,7 @@ get_node(Metric) ->
 metric2stats(Metric) ->
     case proplists:get_value(type, Metric) of
         histogram ->
-            {Id, Key} = id_key(Metric),
+            {Id, Key} = statman_elli:id_key(Metric),
             Summary = statman_histogram:summary(value(Metric)),
             Num = proplists:get_value(observations, Summary, 0),
             case Num of
@@ -104,8 +104,8 @@ metric2stats(Metric) ->
                        | Summary]}]
             end;
         counter ->
-            {Id, Key} = id_key(Metric),
-            CounterKey = {get_node(Metric), id_key(Metric)},
+            {Id, Key} = statman_elli:id_key(Metric),
+            CounterKey = {get_node(Metric), statman_elli:id_key(Metric)},
             Prev = prev_count(CounterKey),
 
             Delta = value(Metric) - Prev,
@@ -115,7 +115,7 @@ metric2stats(Metric) ->
                {node, get_node(Metric)},
                {rate, Delta / window(Metric)}]}];
         gauge ->
-            {Id, Key} = id_key(Metric),
+            {Id, Key} = statman_elli:id_key(Metric),
             [{[{id, Id}, {key, Key},
                {type, gauge},
                {node, get_node(Metric)},
@@ -131,17 +131,3 @@ prev_count(Key) ->
             0
     end.
 
-id_key(Metric) ->
-    case proplists:get_value(key, Metric) of
-        {Id, Key} when is_binary(Id) -> {Id, key(Key)};
-        Key -> {null, key(Key)}
-    end.
-
-
-key({A, B}) ->
-    <<(key(A))/binary, "/", (key(B))/binary>>;
-
-key(A) when is_atom(A) ->
-    ?a2b(A);
-key(B) when is_binary(B) ->
-    B.

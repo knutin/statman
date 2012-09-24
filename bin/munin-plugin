@@ -1,0 +1,117 @@
+#!/usr/bin/python3
+import json
+import urllib.request
+import sys
+import hashlib
+
+URL = "http://localhost:8080/statman/raw"
+CATEGORY = "statman"
+
+data = json.loads(urllib.request.urlopen(URL).read().decode())
+
+
+PERCENTILES = [("p25", "25th percentile"),
+               ("mean", "Mean"),
+               ("p75", "75th percentile"),
+               ("p95", "95th percentile"),
+               ("p99", "99th percentile"),
+               ("p999", "99.9th percentile")]
+
+
+def md5(n):
+    return hashlib.md5(n.encode()).hexdigest()
+
+if len(sys.argv) == 2 and sys.argv[1] == "config":
+
+    for metric in data['metrics']:
+        n = metric['key']
+
+        if metric['type'] == "histogram":
+            print("multigraph {0}_percentiles".format(md5(n)))
+            print("graph_title {0} - percentiles".format(n))
+            print("graph_category {0}".format(CATEGORY))
+
+            for key, label in PERCENTILES:
+                print("{0}.label {1}".format(key, label))
+                print("{0}.type GAUGE".format(key))
+                print("{0}.min 0".format(key))
+
+
+            print()
+            print("multigraph {0}_mean".format(md5(n)))
+            print("graph_title {0} - mean with sd".format(n))
+            print("graph_category {0}".format(CATEGORY))
+            print("mean.label Mean")
+            print("mean.type GAUGE")
+            print("mean.min 0")
+            print("mean.draw LINE2")
+            print("sd_low.label SD low")
+            print("sd_low.type GAUGE")
+            print("sd_low.draw LINE1")
+            print("sd_low.min 0")
+            print("sd_high.label SD high")
+            print("sd_high.type GAUGE")
+            print("sd_high.draw LINE1")
+            print("sd_high.min 0")
+            print()
+
+            print("multigraph {0}_rate".format(md5(n)))
+            print("graph_title {0} - per second".format(n))
+            print("graph_period second")
+            print("graph_category {0}".format(CATEGORY))
+            print("rate.type GAUGE")
+            print("rate.min 0")
+            print("rate.label Rate")
+
+
+        elif metric['type'] == "gauge":
+            print("multigraph {0}".format(md5(n)))
+            print("graph_title {0}".format(n))
+            print("graph_category {0}".format(CATEGORY))
+            print("{0}.label {0}".format(n))
+            print("{0}.min 0".format(n))
+            print("{0}.type GAUGE".format(n))
+            print()
+
+        elif metric['type'] == "counter":
+            print("multigraph {0}".format(md5(n)))
+            print("graph_category gums")
+            print("graph_period minute")
+            print("graph_title {0} per minute".format(n))
+            print("{0}.label {0}".format(n))
+            print("{0}.min 0".format(n))
+            print("{0}.type DERIVE".format(n))
+            print()
+
+else:
+
+    for metric in data['metrics']:
+        n = metric['key']
+
+        if metric['type'] == "histogram":
+            print("multigraph {0}_percentiles".format(md5(n)))
+            for key, _ in PERCENTILES:
+                print("{0}.value {1}".format(key, metric[key] / 1000))
+            print()
+
+            print("multigraph {0}_rate".format(md5(n)))
+            print("rate.value {0}".format(metric['observations'] / 300))
+            print()
+
+            if metric['sd'] != "NaN":
+                print("multigraph {0}_mean".format(md5(n)))
+                print("mean.value {0}".format(metric['mean'] / 1000))
+                low = (metric['mean'] / 1000) - (metric['sd'] / 1000)
+                high = (metric['mean'] / 1000) + (metric['sd'] / 1000)
+                if low < 0: low = 0
+                print("sd_low.value {0}".format(low))
+                print("sd_high.value {0}".format(high))
+                print()
+
+        elif metric['type'] == "gauge":
+            print("multigraph {0}".format(md5(n)))
+            print("{0}.value {1}".format(n, metric['value']))
+
+        elif metric['type'] == "counter":
+            print("multigraph {0}".format(md5(n)))
+            print("{0}.value {1}".format(n, metric['value']))
