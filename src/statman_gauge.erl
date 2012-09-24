@@ -13,7 +13,7 @@ set(Key, Value) when is_integer(Value) orelse is_float(Value) ->
     set(Key, Value, now_to_seconds()).
 
 set(Key, Value, Timestamp) ->
-    ets:insert(?TABLE, {Key, Timestamp, Value}),
+    (catch ets:insert(?TABLE, {Key, Timestamp, Value})),
     ok.
 
 incr(Key) -> incr(Key, 1).
