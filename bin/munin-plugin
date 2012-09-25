@@ -74,10 +74,19 @@ if len(sys.argv) == 2 and sys.argv[1] == "config":
             print()
 
         elif metric['type'] == "counter":
-            print("multigraph {0}".format(md5(n)))
+            print("multigraph {0}_minute".format(md5(n)))
             print("graph_category {0}".format(CATEGORY))
             print("graph_period minute")
             print("graph_title {0} per minute".format(n))
+            print("{0}.label {0}".format(n))
+            print("{0}.min 0".format(n))
+            print("{0}.type DERIVE".format(n))
+            print()
+
+            print("multigraph {0}_second".format(md5(n)))
+            print("graph_category {0}".format(CATEGORY))
+            print("graph_period second")
+            print("graph_title {0} per second".format(n))
             print("{0}.label {0}".format(n))
             print("{0}.min 0".format(n))
             print("{0}.type DERIVE".format(n))
@@ -113,5 +122,8 @@ else:
             print("{0}.value {1}".format(n, metric['value']))
 
         elif metric['type'] == "counter":
-            print("multigraph {0}".format(md5(n)))
+            print("multigraph {0}_minute".format(md5(n)))
+            print("{0}.value {1}".format(n, metric['value']))
+
+            print("multigraph {0}_second".format(md5(n)))
             print("{0}.value {1}".format(n, metric['value']))
