@@ -19,7 +19,7 @@ handle(Req, Config) ->
             ok = statman_elli_server:add_client(elli_request:chunk_ref(Req)),
             {chunk, [{<<"Content-Type">>, <<"text/event-stream">>}]};
 
-        [<<"statman">>, <<"raw">>] ->
+        [<<"statman">>, <<"summary">>] ->
             WindowSize = list_to_integer(
                            binary_to_list(
                              elli_request:get_arg(<<"window">>, Req, <<"300">>))),

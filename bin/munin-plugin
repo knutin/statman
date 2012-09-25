@@ -4,7 +4,7 @@ import urllib.request
 import sys
 import hashlib
 
-URL = "http://localhost:8080/statman/raw"
+URL = "http://localhost:8080/statman/summary"
 CATEGORY = "statman"
 
 data = json.loads(urllib.request.urlopen(URL).read().decode())
