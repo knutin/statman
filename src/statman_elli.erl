@@ -28,6 +28,17 @@ handle(Req, Config) ->
             {ok, [{<<"Content-Type">>, <<"application/json">>}],
              jiffy:encode({[{metrics, lists:flatmap(fun metric2stats/1, Metrics)}]})};
 
+        [<<"statman">>, <<"raw">>] ->
+            WindowSize = list_to_integer(
+                           binary_to_list(
+                             elli_request:get_arg(<<"window">>, Req, <<"300">>))),
+            {ok, Metrics} = statman_aggregator:get_window(WindowSize),
+            error_logger:info_msg("~p~n", [lists:map(fun metric2json/1, Metrics)]),
+
+            {ok, [{<<"Content-Type">>, <<"application/json">>}],
+             jiffy:encode({[{metrics, lists:map(fun metric2json/1, Metrics)}]})};
+
+
         [<<"statman">>, <<"media">> | Path] ->
             Filepath = filename:join([docroot(Config) | Path]),
             valid_path(Filepath) orelse throw({403, [], <<"Permission denied">>}),
@@ -67,6 +78,24 @@ valid_path(Path) ->
         {_, _} -> false;
         nomatch -> true
     end.
+
+metric2json(Metric) ->
+    {Id, Key} = id_key(Metric),
+
+    Value = case proplists:get_value(type, Metric) of
+                histogram ->
+                    lists:map(fun ({Value, Count}) ->
+                                      {[{value, Value}, {count, Count}]}
+                              end, proplists:get_value(value, Metric));
+                _ ->
+                    proplists:get_value(value, Metric)
+            end,
+
+    {[{id, Id}, {key, Key},
+      {type, proplists:get_value(type, Metric)},
+      {node, proplists:get_value(node, Metric)},
+      {value, Value}]}.
+
 
 
 
