@@ -38,20 +38,27 @@ function id(c) {
 
 
 function display_rates(counters) {
+    var nodes = _.uniq(_.map(counters, function (c) {
+        if (c["node"] instanceof Array) {
+            return c['node'].join(",");
+        }
+        return c['node']
+    }));
+
     var ids = _.uniq(_.map(counters, id));
 
-    var headers = _.map(ids, function (id) {
-        return "<th>" + id + "</th>";
+    var headers = _.map(nodes, function (node) {
+        return "<th>" + node + "</th>";
     });
-    var header_str = "<tr><th>Node</th>" + headers + "</tr>";
+    var header_str = "<tr><th></th>" + headers + "</tr>";
     $("#counters thead:last").append(header_str);
 
+    var grouped = _.groupBy(counters, 'key');
+    var keys = _.keys(grouped).sort();
 
-    var nodes = _.groupBy(counters, function (c) { return c['node'] });
-
-    _.each(nodes, function (counters, node) {
-        var counter_tds = _.map(ids, function (i) {
-            var d = _.find(counters, function (c) { return id(c) == i });
+    _.each(keys, function (key) {
+        var counter_tds = _.map(nodes, function (n) {
+            var d = _.find(grouped[key], function (c) { return c['node'] == n });
             if(d) {
                 return "<td>" + d['rate'] + "</td>";
             } else {
@@ -59,7 +66,7 @@ function display_rates(counters) {
             }
         });
 
-        $("#counters tbody:last").append("<tr><td>" + node + "</td>" +
+        $("#counters tbody:last").append("<tr><td>" + key + "</td>" +
                                          counter_tds +
                                          "</tr>");
     });
@@ -67,19 +74,25 @@ function display_rates(counters) {
 
 
 function display_gauges(gauges) {
-    var ids = _.uniq(_.map(gauges, id));
+    var nodes = _.uniq(_.map(gauges, function (c) {
+        if (c["node"] instanceof Array) {
+            return c['node'].join(",");
+        }
+        return c['node']
+    }));
 
-    var headers = _.map(ids, function (id) {
-        return "<th>" + id + "</th>";
+    var headers = _.map(nodes, function (node) {
+        return "<th>" + node + "</th>";
     });
     var header_str = "<tr><th>Node</th>" + headers + "</tr>";
     $("#gauges thead:last").append(header_str);
 
-    var nodes = _.groupBy(gauges, function (c) { return c['node'] });
+    var grouped = _.groupBy(gauges, 'key');
+    var keys = _.keys(grouped).sort();
 
-    _.each(nodes, function (gauges, node) {
-        var gauges_tds = _.map(ids, function (i) {
-            var d = _.find(gauges, function (c) { return id(c) == i });
+    _.each(keys, function (key) {
+        var gauges_tds = _.map(nodes, function (n) {
+            var d = _.find(grouped[key], function (c) { return c['node'] == n });
             if(d) {
                 return "<td>" + d['value'] + "</td>";
             } else {
@@ -87,37 +100,9 @@ function display_gauges(gauges) {
             }
         });
 
-        $("#gauges tbody:last").append("<tr><td>" + node + "</td>" +
+        $("#gauges tbody:last").append("<tr><td>" + key + "</td>" +
                                        gauges_tds +
                                        "</tr>");
-    });
-
-    return;
-
-    var gauges = _.uniq(_.flatten(_.map(data['nodes'], function (v) {
-        return _.map(v['node']['gauges'], function (g) {
-            if (g['id']) {
-                return g['id'] + ":" + g['key'];
-            } else {
-                return g['key'];
-            }
-        });
-    }), true));
-
-    var headers = _.map(gauges, function (g) {
-        return "<th>" + g + "</th>";
-    });
-    var header_str = "<tr><th>Node</th>" + headers + "</tr>";
-    $("#gauges thead:last").append(header_str);
-
-    _.each(data['nodes'], function (n) {
-        var gauges = _.map(n['node']['gauges'], function (g) {
-            return "<td>" + g['value'] + "</td>";
-        });
-        $("#gauges tbody:last").append("<tr><td>" + n['node']['name'] + "</td>" +
-                                       gauges +
-                                       "</tr>"
-                                        );
     });
 }
 
@@ -156,27 +141,36 @@ function display_node_histograms(all_histograms) {
         return h["node"] instanceof Array
     });
 
-    var histograms = _.groupBy(node_histograms, function (h) { return h['node'] });
+    var nodes = _.uniq(_.pluck(node_histograms, 'node')).sort();
 
-    _.each(histograms, function (histograms, node) {
-        $("#node_histograms tbody:last").append("<tr>" +
-                                                "<td colspan='9'>" +
-                                                node + "</td>" +
-                                                "</tr>");
 
-        _.each(histograms, function (h) {
-            $("#node_histograms tbody:last").append(
-                "<tr>" +
-                    "<td></td>" +
-                    "<td>" + id(h) + "</td>" +
-                    "<td>" + h['rate'] + "</td>" +
-                    "<td>" + h['observations'] + "</td>" +
-                    "<td>" + format_us(h['mean']) + " ms</td>" +
-                    "<td>" + format_us(h['sd']) + "</td>" +
-                    "<td>" + format_us(h['p95']) + " ms</td>" +
-                    "<td>" + format_us(h['p99']) + " ms</td>" +
-                    "<td>" + format_us(h['max']) + " ms</td>" +
-                    "</tr>");
+    _.each(nodes, function (node) {
+        var histograms =
+            _.groupBy(
+                _.filter(node_histograms,
+                         function (h) {return h['node'] == node }),
+                function (h) { return h['id'] });
+
+        _.each(histograms, function (histograms, i) {
+            $("#node_histograms tbody:last").append("<tr>" +
+                                                    "<td colspan='9'>" +
+                                                    node + ": " + i + "</td>" +
+                                                    "</tr>");
+
+            _.each(histograms, function (h) {
+                $("#node_histograms tbody:last").append(
+                    "<tr>" +
+                        "<td></td>" +
+                        "<td>" + h['key'] + "</td>" +
+                        "<td>" + h['rate'] + "</td>" +
+                        "<td>" + h['observations'] + "</td>" +
+                        "<td>" + format_us(h['mean']) + " ms</td>" +
+                        "<td>" + format_us(h['sd']) + "</td>" +
+                        "<td>" + format_us(h['p95']) + " ms</td>" +
+                        "<td>" + format_us(h['p99']) + " ms</td>" +
+                        "<td>" + format_us(h['max']) + " ms</td>" +
+                        "</tr>");
+            });
         });
     });
 }
