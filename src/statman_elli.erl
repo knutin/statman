@@ -33,7 +33,6 @@ handle(Req, Config) ->
                            binary_to_list(
                              elli_request:get_arg(<<"window">>, Req, <<"300">>))),
             {ok, Metrics} = statman_aggregator:get_window(WindowSize),
-            error_logger:info_msg("~p~n", [lists:map(fun metric2json/1, Metrics)]),
 
             {ok, [{<<"Content-Type">>, <<"application/json">>}],
              jiffy:encode({[{metrics, lists:map(fun metric2json/1, Metrics)}]})};
