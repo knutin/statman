@@ -117,6 +117,16 @@ merge(Metrics) ->
             lists:foldl(
               fun ({_, _, gauge, _}, Acc) ->
                       Acc;
+
+                  ({Node, Key, counter, Sample}, Acc) ->
+                      case orddict:find(Key, Acc) of
+                          {ok, {Nodes, Key, counter, OtherSample}} ->
+                              orddict:store(Key, {[Node | Nodes], Key, counter,
+                                                  Sample + OtherSample}, Acc);
+                          error ->
+                              orddict:store(Key, {[Node], Key, counter, Sample}, Acc)
+                      end;
+
                   ({Node, Key, Type, Samples}, Acc) ->
                       case orddict:find(Key, Acc) of
                           {ok, {Nodes, Key, Type, OtherSamples}} ->
@@ -139,8 +149,9 @@ merge_samples(histogram, Samples) ->
                                       Agg)
                 end, orddict:new(), Samples);
 
-merge_samples(counter, Samples) ->
-    lists:sum(Samples);
+
+merge_samples(counter, [Sample | _]) ->
+    Sample;
 
 merge_samples(gauge, []) ->
     0;
@@ -221,7 +232,7 @@ window_test() ->
     ?assertEqual([{key, {foo, bar}},
                   {node, ['a@knutin', 'b@knutin']},
                   {type, counter},
-                  {value, 120},
+                  {value, 60},
                   {window, 60000}], MergedCounter).
 
 
