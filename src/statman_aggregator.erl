@@ -98,6 +98,11 @@ insert(Metric, Metrics) ->
                {type(Metric), [{now_to_seconds(), value(Metric)} | Samples]},
                Metrics).
 
+window(_, []) ->
+    [];
+window(1, [{_, Sample} | _]) ->
+    Sample;
+
 window(Size, Samples) ->
     element(2, lists:unzip(samples_after(now_to_seconds() - Size, Samples))).
 
