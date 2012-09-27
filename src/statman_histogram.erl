@@ -63,8 +63,8 @@ summary(Data) ->
      {sd, sd(N, Sum, Sum2)},
      {sum, Sum},
      {sum2, Sum2},
-     {p25, find_quantile(Data, 0.99 * N)},
-     {p75, find_quantile(Data, 0.99 * N)},
+     {p25, find_quantile(Data, 0.25 * N)},
+     {p75, find_quantile(Data, 0.75 * N)},
      {p95, find_quantile(Data, 0.95 * N)},
      {p99, find_quantile(Data, 0.99 * N)},
      {p999, find_quantile(Data, 0.999 * N)}
@@ -173,8 +173,13 @@ test_stats() ->
                      {mean, 50.5},
                      {max, 100},
                      {sd, 28.914300774835606}, %% Checked with R
+                     {sum, 15150},
+                     {sum2, 1015050},
+                     {p25, 25},
+                     {p75, 75},
                      {p95, 95},
-                     {p99, 99}],
+                     {p99, 99},
+                     {p999, 100}],
     ?assertEqual(ExpectedStats, summary([{N, 3} || N <- lists:seq(1, 100)])).
 
 test_histogram() ->
@@ -188,8 +193,13 @@ test_histogram() ->
                      {mean, 50.5},
                      {max, 100},
                      {sd, 28.914300774835606}, %% Checked with R
+                     {sum, 15150},
+                     {sum2, 1015050},
+                     {p25, 25},
+                     {p75, 75},
                      {p95, 95},
-                     {p99, 99}],
+                     {p99, 99},
+                     {p999, 100}],
 
     ?assertEqual(ExpectedStats, summary(get_data(key))),
 
