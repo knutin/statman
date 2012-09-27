@@ -25,7 +25,7 @@ decr(Key, Decr) -> incr(Key, -Decr).
 incr(Key, Incr) ->
     case catch ets:update_counter(?TABLE, Key, {3, Incr}) of
         {'EXIT', {badarg, _}} ->
-            (catch ets:insert(?TABLE, {Key, Incr})),
+            set(Key, Incr),
             ok;
         _ ->
             ok
@@ -76,6 +76,9 @@ test_expire() ->
 
 
 test_set_incr() ->
+    incr(foo, 2),
+    ?assertEqual([{foo, 2}], get_all()),
+
     set(foo, 10),
     incr(foo),
     incr(foo),
