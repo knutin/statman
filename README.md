@@ -1,13 +1,20 @@
 # statman - Statistics man to the rescue!
 
-`statman` lets you to add a metric ton of instrumentation to your
-Erlang code without worrying. You won't overload any processes, use
-too much memory or have too expensive aggregations.
+Statman makes it possible to instrument your production Erlang systems
+with very low overhead. Statman is inspired by Coda Hales metrics
+(https://github.com/codahale/metrics/) and Boundarys Folsom
+(https://github.com/boundary/folsom).
 
-`statman` has a nice real-time web interface and can be polled from
-Munin / Ganglia (when `statman_aggregator` is done). Graphite, Librato
-metrics, New Relic etc can also be integrated.
+Statman takes advantage of efficient operations in ETS and does a few
+tricks to save space and CPU. The result is that you can concurrently
+collect latency histograms and retain the raw data for sound
+statistical processing, without the space overhead of each sample. See
+"How does it work" below.
 
+The [statman_elli](https://github.com/knutin/statman_elli) project has
+a real-time dashboard of statistics and HTTP endpointsfor retrieving
+stats for external tools like Munin(plugin included), Librato,
+Graphite, etc.
 
 ## How does it work
 
@@ -43,3 +50,13 @@ cluster throughput, request latency per node, request latency as a
 whole, etc, is extremely useful.
 
 ## Setup
+
+Statman has two parts, `statman_server` and `statman_aggregator`. The
+server owns the ETS-tables and periodically forwards the changes to
+any interested aggregator. The aggregator keeps a moving window of
+metrics coming from one ore more servers. You can ask the aggregator
+for the stats collected in the last N seconds.
+
+You need to run one server under a supervisor in each node. If you
+have a cluster of nodes, you can run the aggregator on just one of
+them, collecting stats for the whole cluster.
