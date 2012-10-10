@@ -16,6 +16,30 @@ a real-time dashboard of statistics and HTTP endpointsfor retrieving
 stats for external tools like Munin(plugin included), Librato,
 Graphite, etc.
 
+## Usage
+
+Add `statman_server` to one of your supervisors:
+```erlang
+init([]) ->
+    {ok, {{one_for_one, 5, 10}, [{statman_server, {statman_server, start_link, [1000]},
+                                  permanent, 5000, worker, []}]}}.
+```
+
+From anywhere in your code:
+
+```erlang
+%% Counters measure the frequency of an event
+statman_counter:incr(my_queue_in).
+
+%% A gauge is a point in time snapshot of a value
+statman_gauge:set(queue_size, N).
+
+%% Histograms show you the distribution of values
+Start = now(),
+do_work()
+statman_histogram:record_value(work_time, timer:now_diff(now(), Start)).
+```
+
 ## How does it work
 
 Using `ets:update_counter/3` we get very efficient atomic increments /
