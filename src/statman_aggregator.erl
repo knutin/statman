@@ -155,8 +155,8 @@ merge_samples(histogram, Samples) ->
                 end, orddict:new(), Samples);
 
 
-merge_samples(counter, [Sample | _]) ->
-    Sample;
+merge_samples(counter, Samples) ->
+    lists:sum(Samples);
 
 merge_samples(gauge, []) ->
     0;
@@ -237,7 +237,7 @@ window_test() ->
     ?assertEqual([{key, {foo, bar}},
                   {node, ['a@knutin', 'b@knutin']},
                   {type, counter},
-                  {value, 60},
+                  {value, 120},
                   {window, 60000}], MergedCounter).
 
 

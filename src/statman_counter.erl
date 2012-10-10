@@ -1,5 +1,5 @@
 -module(statman_counter).
--export([init/0, counters/0, get/1, get_all/0]).
+-export([init/0, counters/0, get/1, get_all/0, reset/2]).
 -export([incr/1, incr/2, decr/1, decr/2, set/2]).
 -compile([{no_auto_import, [get/1]}]).
 -include_lib("eunit/include/eunit.hrl").
@@ -38,6 +38,8 @@ decr(Key, Incr) -> incr(Key, -Incr).
 counters() ->
     ets:select(?TABLE, [{ {'$1', '$2'}, [], ['$1'] }]).
 
+reset(Key, Value) ->
+    decr(Key, Value).
 
 %%
 %% INTERNAL HELPERS
@@ -79,7 +81,8 @@ counter_test_() ->
      [
       ?_test(test_operations()),
       ?_test(find_counters()),
-      ?_test(benchmark())
+      ?_test(benchmark()),
+      ?_test(test_reset())
      ]
     }.
 
@@ -118,6 +121,24 @@ find_counters() ->
     ?assertEqual(ok, incr(bar)),
     ?assertEqual(lists:sort([bar, foo]), lists:sort(counters())),
     ?assertEqual(lists:sort([{bar, 1}, {foo, 1}]), lists:sort(get_all())).
+
+
+
+test_reset() ->
+    ?assertEqual([], counters()),
+
+    ok = incr(foo, 5),
+    ?assertEqual(5, get(foo)),
+
+    [{foo, Count}] = get_all(),
+    incr(foo, 3),
+    ?assertEqual(8, get(foo)),
+
+    ok = reset(foo, Count),
+    ?assertEqual(3, get(foo)).
+
+
+
 
 benchmark() ->
     do_benchmark(4, 100000),

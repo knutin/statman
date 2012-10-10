@@ -74,6 +74,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 counters(Window) ->
     lists:map(fun ({K, V}) ->
+                      statman_counter:reset(K, V),
                       [{key, K}, {node, node()}, {type, counter},
                        {value, V}, {window, Window}]
               end, statman_counter:get_all()).
