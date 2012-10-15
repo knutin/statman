@@ -7,7 +7,8 @@
 -module(statman_server).
 -behaviour(gen_server).
 
--export([start_link/1, add_subscriber/1, remove_subscriber/1, report/0]).
+-export([start_link/1, start_link/2,
+         add_subscriber/1, remove_subscriber/1, report/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -20,7 +21,11 @@
 %%%===================================================================
 
 start_link(ReportInterval) ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, [ReportInterval], []).
+    start_link(ReportInterval, []).
+
+start_link(ReportInterval, StartSubscribers) ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE,
+                          [ReportInterval, StartSubscribers], []).
 
 add_subscriber(Ref) ->
     gen_server:call(?MODULE, {add_subscriber, Ref}).
@@ -35,13 +40,15 @@ report() ->
 %%% gen_server callbacks
 %%%===================================================================
 
-init([ReportInterval]) ->
+init([ReportInterval, StartSubscribers]) ->
     ok = statman_counter:init(),
     ok = statman_gauge:init(),
     ok = statman_histogram:init(),
 
     erlang:send_after(ReportInterval, self(), report),
-    {ok, #state{counters = dict:new(), report_interval = ReportInterval}}.
+    {ok, #state{counters = dict:new(),
+                subscribers = StartSubscribers,
+                report_interval = ReportInterval}}.
 
 handle_call({add_subscriber, Ref}, _From, #state{subscribers = Sub} = State) ->
     {reply, ok, State#state{subscribers = [Ref | Sub]}};
