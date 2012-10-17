@@ -1,20 +1,22 @@
 # statman - Statistics man to the rescue!
 
-Statman makes it possible to instrument your production Erlang systems
-with very low overhead. Statman is inspired by Coda Hales metrics
-(https://github.com/codahale/metrics/) and Boundarys Folsom
-(https://github.com/boundary/folsom).
+Statman makes it possible to instrument and collect statistics from
+your production Erlang systems with very low overhead.
 
-Statman takes advantage of efficient operations in ETS and does a few
-tricks to save space and CPU. The result is that you can concurrently
-collect latency histograms and retain the raw data for sound
-statistical processing, without the space overhead of each sample. See
-"How does it work" below.
+Statman uses in-memory ETS tables for low overhead logging and to
+avoid single process bottlenecks. You can concurrently collect latency
+histograms and efficiently store the raw histograms for sound
+statistical processing. See "How does it work" below.
 
 The [statman_elli](https://github.com/knutin/statman_elli) project has
-a real-time dashboard of statistics and HTTP endpointsfor retrieving
+a real-time dashboard of statistics and HTTP endpoints for retrieving
 stats for external tools like Munin(plugin included), Librato,
 Graphite, etc.
+
+The [newrelic-erlang](https://github.com/wooga/newrelic-erlang)
+project implements an Erlang agent for a hosted application monitoring
+service called New Relic and includes a module for reading stats from
+Statman.
 
 ## Usage
 
