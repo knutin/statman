@@ -28,6 +28,9 @@ init() ->
     ets:new(?TABLE, [named_table, public, set]),
     ok.
 
+record_value(UserKey, Value) when is_tuple(Value) ->
+    record_value(UserKey, timer:now_diff(now(), Value));
+
 record_value(UserKey, Value) when is_integer(Value) ->
     histogram_incr({UserKey, Value}, 1),
     ok.
