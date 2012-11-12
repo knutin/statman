@@ -39,7 +39,7 @@ statman_gauge:set(queue_size, N).
 %% Histograms show you the distribution of values
 Start = now(),
 do_work()
-statman_histogram:record_value(work_time, timer:now_diff(now(), Start)).
+statman_histogram:record_value(work_time, Start).
 ```
 
 ## How does it work
