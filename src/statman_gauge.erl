@@ -28,12 +28,15 @@ incr(Key, Incr) ->
             set(Key, Incr),
             ok;
         _ ->
+            ets:update_element(?TABLE, Key, {2, now_to_seconds()}),
             ok
     end.
 
 expire() ->
     expire(now_to_seconds() - 60).
 
+%% @doc: Deletes any gauges that has not been updated since the given
+%% threshold.
 expire(Threshold) ->
     ets:select_delete(?TABLE, [{{'_', '$1', '_'}, [{'<', '$1', Threshold}], [true]}]).
 
@@ -54,6 +57,7 @@ gauge_test_() ->
      fun setup/0, fun teardown/1,
      [
       ?_test(test_expire()),
+      ?_test(test_expire_incr_decr()),
       ?_test(test_set_incr())
      ]
     }.
@@ -73,6 +77,15 @@ test_expire() ->
     ?assertEqual(0, expire(now_to_seconds() - 5)),
     ?assertEqual(1, expire(now_to_seconds() - 0)),
     ?assertEqual([], get_all()).
+
+test_expire_incr_decr() ->
+    ?assertEqual([], get_all()),
+
+    ok = set(problems, 100, now_to_seconds() - 3),
+    ok = decr(problems),
+    ?assertEqual([{problems, 99}], get_all()),
+    ?assertEqual(0, expire(now_to_seconds()-1)),
+    ?assertEqual([{problems, 99}], get_all()).
 
 
 test_set_incr() ->
