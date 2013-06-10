@@ -92,11 +92,16 @@ reset(UserKey, [{Key, Value} | Data]) ->
 %%
 %% INTERNAL HELPERS
 %%
-
+-spec bin(integer()) -> integer().
 bin(0) -> 0;
-
 bin(N) ->
-    case (N div 1000) * 1000 of
+    Binner =
+        if N < 10000 -> 1000;
+           true ->
+                %% keep 2 digits
+                round(math:pow(10, trunc(math:log10(N)) - 1))
+        end,
+    case (N div Binner) * Binner of
         0 ->
             1;
         Bin ->
@@ -152,6 +157,9 @@ find_quantile([{Value, Freq} | Rest], Samples, NeededSamples) ->
 %%
 %% TESTS
 %%
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
 
 histogram_test_() ->
     {foreach,
@@ -271,4 +279,15 @@ bin_test() ->
     ?assertEqual(1, bin(999)),
     ?assertEqual(1000, bin(1000)),
     ?assertEqual(1000, bin(1001)),
-    ?assertEqual(2000, bin(2000)).
+    ?assertEqual(2000, bin(2000)),
+    ?assertEqual(1000, bin(1010)),
+    ?assertEqual(1000, bin(1100)),
+    ?assertEqual(10000, bin(10001)),
+    ?assertEqual(10000, bin(10010)),
+    ?assertEqual(10000, bin(10010)),
+    ?assertEqual(10000, bin(10100)),
+    ?assertEqual(11000, bin(11000)),
+    ?assertEqual(12000000, bin(12345678)),
+    ?assertEqual(120000000, bin(123456789)).
+
+-endif. %% TEST
