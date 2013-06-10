@@ -15,7 +15,6 @@
 -export([bin/1]).
 
 -compile([native]).
--include_lib("eunit/include/eunit.hrl").
 
 -define(TABLE, statman_histograms).
 
