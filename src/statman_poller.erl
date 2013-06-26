@@ -1,0 +1,101 @@
+%% @doc: Statman server, sends reports and owns the ETS tables
+-module(statman_poller).
+-behaviour(gen_server).
+-include_lib("eunit/include/eunit.hrl").
+
+-export([start_link/0]).
+-export([add_gauge/1, add_fun/2, remove_fun/1]).
+
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+         terminate/2, code_change/3]).
+
+-record(state, {timers = [], fs = []}).
+
+%%%===================================================================
+%%% API
+%%%===================================================================
+
+start_link() ->
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+
+add_gauge(F)             -> add_fun({gauge, F}, 10000).
+add_gauge(F, Interval)   -> add_fun({gauge, F}, Interval).
+    
+add_counter(F)           -> add_fun({counter, F}, 10000).
+add_counter(F, Interval) -> add_fun({counter, F}, Interval).
+
+
+remove_fun(F) -> gen_server:call(?MODULE, {remove, F}).
+
+add_fun(TypedF, Interval) -> gen_server:call(?MODULE, {add, TypedF, Interval}).
+
+%%%===================================================================
+%%% gen_server callbacks
+%%%===================================================================
+
+init([]) ->
+    {ok, #state{fs = []}}.
+
+handle_call({add, TypedF, Interval}, _From, #state{fs = Fs} = State) ->
+    NewTimers = case orddict:find(Interval, State#state.timers) of
+                    {ok, _} -> State#state.timers;
+                    error ->
+                        {ok, TRef} = timer:send_interval(Interval, {poll, Interval}),
+                        orddict:store(Interval, TRef, State#state.timers)
+                end,
+
+    {reply, ok, State#state{timers = NewTimers, fs = [{Interval, TypedF} | Fs]}};
+
+handle_call({remove_gauge, GaugeF}, _From, #state{fs = Fs} = State) ->
+    {reply, ok, State#state{fs = lists:delete(GaugeF, Fs)}}.
+
+handle_cast(_Msg, State) ->
+    {noreply, State}.
+
+handle_info({poll, Interval}, State) ->
+    lists:foreach(fun ({I, {gauge, F}}) when I =:= Interval ->
+                          [statman_gauge:set(K, V) || {K, V} <- F()];
+                      ({I, {counter, F}}) when I =:= Interval ->
+                          [statman_counter:incr(K, V) || {K, V} <- F()];
+                      (_) ->
+                          ok
+                  end, State#state.fs),
+    {noreply, State}.
+
+terminate(_Reason, _State) ->
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+poller_test_() ->
+    {foreach, fun setup/0, fun teardown/1,
+     [
+      ?_test(poller_fun())
+     ]}.
+
+setup() ->
+    statman_counter:init(),
+    statman_gauge:init().
+
+teardown(_) ->
+    [ets:delete(T) || T <- [statman_counters, statman_gauges]].
+
+poller_fun() ->
+    GaugeF = fun() -> [{gauge, 5}] end,
+    CounterF = fun () -> [{counter, 5}] end,
+
+    ?assertEqual([], statman_counter:get_all()),
+    ?assertEqual([], statman_gauge:get_all()),
+
+    {ok, _} = start_link(),
+    ok = add_counter(CounterF, 100),
+    ok = add_gauge(GaugeF, 100),
+    timer:sleep(100),
+
+    ?assertEqual([{counter, 5}], statman_counter:get_all()),
+    ?assertEqual([{gauge, 5}], statman_gauge:get_all()).
