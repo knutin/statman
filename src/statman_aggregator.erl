@@ -103,6 +103,7 @@ do_reply(Client, Metrics, Size, MergeNodes) ->
 
 insert(Metric, Metrics) ->
     dict:update(nodekey(Metric),
+                %% FIXME: this breaks if you have the same key for different types of metrics
                 fun ({_Type, Samples}) ->
                         {type(Metric), [{now_to_seconds(), value(Metric)} | Samples]}
                 end,
