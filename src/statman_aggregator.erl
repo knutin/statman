@@ -174,10 +174,7 @@ merge_samples(counter, Samples) ->
 merge_samples(gauge, []) ->
     0;
 merge_samples(gauge, Samples) ->
-    lists:last(
-      lists:filter(fun ([]) -> false;
-                       (_)  -> true
-                   end, Samples)).
+    hd(Samples).
 
 
 
@@ -237,6 +234,8 @@ expire() ->
     gen_server:cast(?MODULE, {statman_update, [sample_histogram('a@knutin')]}),
     gen_server:cast(?MODULE, {statman_update, [sample_counter('a@knutin')]}),
     gen_server:cast(?MODULE, {statman_update, [sample_counter('a@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_gauge('a@knutin', 1)]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_gauge('a@knutin', 3)]}),
 
     ?assert(lists:all(fun (M) ->
                               V = proplists:get_value(value, M, 0),
@@ -254,6 +253,8 @@ window() ->
     gen_server:cast(?MODULE, {statman_update, [sample_histogram('a@knutin')]}),
     gen_server:cast(?MODULE, {statman_update, [sample_counter('a@knutin')]}),
     gen_server:cast(?MODULE, {statman_update, [sample_counter('a@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_gauge('a@knutin', 1)]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_gauge('a@knutin', 3)]}),
     gen_server:cast(?MODULE, {statman_update, [sample_histogram('b@knutin')]}),
 
     timer:sleep(1000),
@@ -261,11 +262,12 @@ window() ->
     gen_server:cast(?MODULE, {statman_update, [sample_histogram('a@knutin')]}),
     gen_server:cast(?MODULE, {statman_update, [sample_histogram('a@knutin')]}),
     gen_server:cast(?MODULE, {statman_update, [sample_counter('a@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_gauge('a@knutin', 2)]}),
     gen_server:cast(?MODULE, {statman_update, [sample_histogram('b@knutin')]}),
 
     {ok, Aggregated} = get_window(60),
 
-    [MergedCounter, MergedHistogramA, MergedHistogramB] = lists:sort(Aggregated),
+    [MergedCounter, MergedGauge, MergedHistogramA, MergedHistogramB] = lists:sort(Aggregated),
 
 
     ?assertEqual([{key, {<<"/highscores">>,db_a_latency}},
@@ -284,7 +286,13 @@ window() ->
                   {node, 'a@knutin'},
                   {type, counter},
                   {value, 90},
-                  {window, 60000}], MergedCounter).
+                  {window, 60000}], MergedCounter),
+
+    ?assertEqual([{key, {foo, baz}},
+                  {node, 'a@knutin'},
+                  {type, gauge},
+                  {value, 2},
+                  {window, 60000}], MergedGauge).
 
 merged_window() ->
     gen_server:cast(?MODULE, {statman_update, [sample_histogram('a@knutin')]}),
@@ -340,5 +348,12 @@ sample_counter(Node) ->
      {node,Node},
      {type,counter},
      {value,30},
+     {window,1000}].
+
+sample_gauge(Node, Value) ->
+    [{key,{foo, baz}},
+     {node,Node},
+     {type,gauge},
+     {value,Value},
      {window,1000}].
 -endif.
