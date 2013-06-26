@@ -102,14 +102,12 @@ do_reply(Client, Metrics, Size, MergeNodes) ->
 
 
 insert(Metric, Metrics) ->
-    Samples = case dict:find(nodekey(Metric), Metrics) of
-                  {ok, {_Type, M}} -> M;
-                  error -> []
-              end,
-
-    dict:store(nodekey(Metric),
-               {type(Metric), [{now_to_seconds(), value(Metric)} | Samples]},
-               Metrics).
+    dict:update(nodekey(Metric),
+                fun ({_Type, Samples}) ->
+                        {type(Metric), [{now_to_seconds(), value(Metric)} | Samples]}
+                end,
+                {type(Metric), [{now_to_seconds(), value(Metric)}]},
+                Metrics).
 
 window(_, []) ->
     [];
