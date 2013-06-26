@@ -12,7 +12,9 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
+-endif.
 
 -record(state, {
           subscribers = [],
@@ -48,18 +50,13 @@ handle_call({remove_subscriber, Ref}, _From, #state{subscribers = Sub} = State) 
     {reply, ok, State#state{subscribers = lists:delete(Ref, Sub)}};
 
 
-handle_call({get_window, Size}, _From, #state{metrics = Metrics} = State) ->
+handle_call({get_window, Size}, From, #state{metrics = Metrics} = State) ->
     PurgedMetrics = dict:map(fun (_, {Type, Samples}) ->
                                      {Type, purge(Samples)}
                              end, Metrics),
 
-    Aggregated = lists:map(
-                   fun ({{Node, Key}, {Type, Samples}}) ->
-                           {Node, Key, Type, merge_samples(Type, window(Size, Samples))}
-                   end, dict:to_list(PurgedMetrics)),
-
-    Reply = format(Size, Aggregated) ++ format(Size, merge(Aggregated)),
-    {reply, {ok, Reply}, State#state{metrics = PurgedMetrics}};
+    spawn(fun() -> do_reply(From, PurgedMetrics, Size) end),
+    {noreply, State#state{metrics = PurgedMetrics}};
 
 
 handle_call(get_keys, _From, State) ->
@@ -67,7 +64,6 @@ handle_call(get_keys, _From, State) ->
                               [{Key, Type} | Acc]
                       end, [], State#state.metrics),
     {reply, {ok, Reply}, State}.
-
 
 
 handle_cast({statman_update, NewSamples}, #state{metrics = Metrics} = State) ->
@@ -86,6 +82,15 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+do_reply(Client, Metrics, Size) ->
+    Aggregated = lists:map(
+                     fun ({{Node, Key}, {Type, Samples}}) ->
+                             {Node, Key, Type, merge_samples(Type, window(Size, Samples))}
+                     end, dict:to_list(Metrics)),
+
+    Reply = format(Size, Aggregated) ++ format(Size, merge(Aggregated)),
+    gen_server:reply(Client, {ok, Reply}).
 
 
 insert(Metric, Metrics) ->
@@ -200,20 +205,54 @@ now_to_seconds() ->
 %% TESTS
 %%
 
-window_test() ->
-    {ok, P} = start_link(),
+-ifdef(TEST).
+aggregator_test_() ->
+    {foreach,
+     fun setup/0, fun teardown/1,
+     [?_test(expire()),
+      ?_test(window())
+     ]
+    }.
 
-    gen_server:cast(P, {statman_update, [sample_histogram('a@knutin')]}),
-    gen_server:cast(P, {statman_update, [sample_histogram('b@knutin')]}),
-    gen_server:cast(P, {statman_update, [sample_counter('a@knutin')]}),
-    gen_server:cast(P, {statman_update, [sample_counter('b@knutin')]}),
+setup() ->
+    {ok, Pid} = start_link(),
+    true = unlink(Pid),
+    Pid.
+
+teardown(Pid) ->
+    exit(Pid, kill),
+    timer:sleep(1000),
+    false = is_process_alive(Pid).
+
+expire() ->
+    gen_server:cast(?MODULE, {statman_update, [sample_histogram('a@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_counter('a@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_counter('a@knutin')]}),
+
+    ?assert(lists:all(fun (M) ->
+                              V = proplists:get_value(value, M, 0),
+                              V =/= 0 andalso V =/= []
+                      end, element(2, get_window(2)))),
+
+    timer:sleep(3000),
+
+    ?assert(lists:all(fun (M) ->
+                              V = proplists:get_value(value, M),
+                              V == 0 orelse V =:= []
+                      end, element(2, get_window(2)))).
+
+window() ->
+    gen_server:cast(?MODULE, {statman_update, [sample_histogram('a@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_histogram('b@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_counter('a@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_counter('b@knutin')]}),
 
     timer:sleep(1000),
 
-    gen_server:cast(P, {statman_update, [sample_histogram('a@knutin')]}),
-    gen_server:cast(P, {statman_update, [sample_histogram('b@knutin')]}),
-    gen_server:cast(P, {statman_update, [sample_counter('a@knutin')]}),
-    gen_server:cast(P, {statman_update, [sample_counter('b@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_histogram('a@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_histogram('b@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_counter('a@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_counter('b@knutin')]}),
 
     ?assertEqual([
                   {nodekey(sample_counter('a@knutin')), counter},
@@ -224,8 +263,8 @@ window_test() ->
 
     {ok, Aggregated} = get_window(60),
 
-    [_ACounter, _BCounter, MergedCounter,
-     _AHistogram, _BHistogram, MergedHistogram] = lists:sort(Aggregated),
+    [_CounterA, _CounterB, MergedCounter,
+     _HistogramA, _HistogramB, MergedHistogram] = lists:sort(Aggregated),
 
 
     ?assertEqual([{key, {<<"/highscores">>,db_a_latency}},
@@ -239,8 +278,6 @@ window_test() ->
                   {type, counter},
                   {value, 120},
                   {window, 60000}], MergedCounter).
-
-
 
 
 
@@ -259,3 +296,4 @@ sample_counter(Node) ->
      {type,counter},
      {value,30},
      {window,1000}].
+-endif.
