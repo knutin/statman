@@ -4,7 +4,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -export([start_link/0]).
--export([add_gauge/1, add_fun/2, remove_fun/1]).
+-export([add_gauge/1, add_counter/1, remove_gauge/1, remove_counter/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -25,7 +25,10 @@ add_counter(F)           -> add_fun({counter, F}, 10000).
 add_counter(F, Interval) -> add_fun({counter, F}, Interval).
 
 
-remove_fun(F) -> gen_server:call(?MODULE, {remove, F}).
+remove_gauge(F)   -> remove_fun({gauge, F}).
+remove_counter(F) -> remove_fun({counter, F}).
+
+remove_fun(TypedF) -> gen_server:call(?MODULE, {remove, TypedF}).
 
 add_fun(TypedF, Interval) -> gen_server:call(?MODULE, {add, TypedF, Interval}).
 
@@ -46,8 +49,8 @@ handle_call({add, TypedF, Interval}, _From, #state{fs = Fs} = State) ->
 
     {reply, ok, State#state{timers = NewTimers, fs = [{Interval, TypedF} | Fs]}};
 
-handle_call({remove_gauge, GaugeF}, _From, #state{fs = Fs} = State) ->
-    {reply, ok, State#state{fs = lists:delete(GaugeF, Fs)}}.
+handle_call({remove, TypedF}, _From, #state{fs = Fs} = State) ->
+    {reply, ok, State#state{fs = lists:keydelete(TypedF, 2, Fs)}}.
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -75,7 +78,8 @@ code_change(_OldVsn, State, _Extra) ->
 poller_test_() ->
     {foreach, fun setup/0, fun teardown/1,
      [
-      ?_test(poller_fun())
+      ?_test(poller_fun()),
+      ?_test(remove_poller())
      ]}.
 
 setup() ->
@@ -99,3 +103,13 @@ poller_fun() ->
 
     ?assertEqual([{counter, 5}], statman_counter:get_all()),
     ?assertEqual([{gauge, 5}], statman_gauge:get_all()).
+
+remove_poller() ->
+    GaugeF = fun() -> [{gauge, 5}] end,
+    {ok, Init} = init([]),
+
+    {_, ok, Added} = handle_call({add, {gauge, GaugeF}, 1000}, undefined, Init),
+    ?assertMatch(#state{fs = [{1000, {gauge, GaugeF}}]}, Added),
+
+    {_, ok, Removed} = handle_call({remove, {gauge, GaugeF}}, undefined, Added),
+    ?assertMatch(#state{fs = []}, Removed).
