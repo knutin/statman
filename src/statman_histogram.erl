@@ -10,7 +10,8 @@
          keys/0,
          get_data/1,
          summary/1,
-         reset/2]).
+         reset/2,
+         gc/0]).
 
 -export([bin/1]).
 
@@ -42,6 +43,8 @@ keys() ->
     %% TODO: Maybe keep a special table of all used keys?
     lists:usort(ets:select(?TABLE, [{ { {'$1', '_'}, '_' }, [], ['$1'] }])).
 
+gc() ->
+    ets:select_delete(?TABLE, [{ {{'_', '_'}, 0}, [], [true] }]).
 
 clear(UserKey) ->
     ets:select_delete(?TABLE, [{{{UserKey, '_'}, '_'}, [], [true]  }]).
@@ -168,6 +171,7 @@ histogram_test_() ->
       ?_test(test_histogram()),
       ?_test(test_samples()),
       ?_test(test_reset()),
+      ?_test(test_gc()),
       ?_test(test_keys()),
       ?_test(test_binning())
      ]
@@ -225,6 +229,18 @@ test_histogram() ->
     [record_value(key, N) || N <- lists:seq(1, 100)],
     ?assertEqual(ExpectedStats, summary(get_data(key))).
 
+test_gc() ->
+    [record_value(key, N) || N <- lists:seq(1, 100)],
+    ?assertEqual(100, proplists:get_value(observations, summary(get_data(key)))),
+
+    ?assertEqual([{{key, 5}, 1}], ets:lookup(?TABLE, {key, 5})),
+    ?assertEqual(0, gc()),
+    reset(key, get_data(key)),
+    ?assertEqual(100, gc()),
+    ?assertEqual(0, gc()),
+
+    ?assertEqual([], get_data(key)),
+    ok.
 
 test_reset() ->
     [record_value(key, N) || N <- lists:seq(1, 100)],
