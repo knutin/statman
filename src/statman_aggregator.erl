@@ -7,12 +7,14 @@
 -module(statman_aggregator).
 -behaviour(gen_server).
 
--export([start_link/0, get_window/1, get_keys/0]).
+-export([start_link/0, get_window/1, get_merged_window/1, get_keys/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
+-endif.
 
 -record(state, {
           subscribers = [],
@@ -29,7 +31,10 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 get_window(Size) ->
-    gen_server:call(?MODULE, {get_window, Size}).
+    gen_server:call(?MODULE, {get_window, Size, false}).
+
+get_merged_window(Size) ->
+    gen_server:call(?MODULE, {get_window, Size, true}).
 
 get_keys() ->
     gen_server:call(?MODULE, get_keys).
@@ -48,18 +53,13 @@ handle_call({remove_subscriber, Ref}, _From, #state{subscribers = Sub} = State) 
     {reply, ok, State#state{subscribers = lists:delete(Ref, Sub)}};
 
 
-handle_call({get_window, Size}, _From, #state{metrics = Metrics} = State) ->
+handle_call({get_window, Size, MergeNodes}, From, #state{metrics = Metrics} = State) ->
     PurgedMetrics = dict:map(fun (_, {Type, Samples}) ->
                                      {Type, purge(Samples)}
                              end, Metrics),
 
-    Aggregated = lists:map(
-                   fun ({{Node, Key}, {Type, Samples}}) ->
-                           {Node, Key, Type, merge_samples(Type, window(Size, Samples))}
-                   end, dict:to_list(PurgedMetrics)),
-
-    Reply = format(Size, Aggregated) ++ format(Size, merge(Aggregated)),
-    {reply, {ok, Reply}, State#state{metrics = PurgedMetrics}};
+    spawn(fun() -> do_reply(From, PurgedMetrics, Size, MergeNodes) end),
+    {noreply, State#state{metrics = PurgedMetrics}};
 
 
 handle_call(get_keys, _From, State) ->
@@ -67,7 +67,6 @@ handle_call(get_keys, _From, State) ->
                               [{Key, Type} | Acc]
                       end, [], State#state.metrics),
     {reply, {ok, Reply}, State}.
-
 
 
 handle_cast({statman_update, NewSamples}, #state{metrics = Metrics} = State) ->
@@ -87,16 +86,29 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
+do_reply(Client, Metrics, Size, MergeNodes) ->
+    Aggregated = lists:map(
+                     fun ({{Node, Key}, {Type, Samples}}) ->
+                             {Node, Key, Type, merge_samples(Type, window(Size, Samples))}
+                     end, dict:to_list(Metrics)),
+
+    Reply = case MergeNodes of
+                false ->
+                    format(Size, Aggregated);
+                true ->
+                    format(Size, Aggregated) ++ format(Size, merge(Aggregated))
+            end,
+    gen_server:reply(Client, {ok, Reply}).
+
 
 insert(Metric, Metrics) ->
-    Samples = case dict:find(nodekey(Metric), Metrics) of
-                  {ok, {_Type, M}} -> M;
-                  error -> []
-              end,
-
-    dict:store(nodekey(Metric),
-               {type(Metric), [{now_to_seconds(), value(Metric)} | Samples]},
-               Metrics).
+    dict:update(nodekey(Metric),
+                %% FIXME: this breaks if you have the same key for different types of metrics
+                fun ({_Type, Samples}) ->
+                        {type(Metric), [{now_to_seconds(), value(Metric)} | Samples]}
+                end,
+                {type(Metric), [{now_to_seconds(), value(Metric)}]},
+                Metrics).
 
 window(_, []) ->
     [];
@@ -161,10 +173,7 @@ merge_samples(counter, Samples) ->
 merge_samples(gauge, []) ->
     0;
 merge_samples(gauge, Samples) ->
-    lists:last(
-      lists:filter(fun ([]) -> false;
-                       (_)  -> true
-                   end, Samples)).
+    hd(Samples).
 
 
 
@@ -200,20 +209,102 @@ now_to_seconds() ->
 %% TESTS
 %%
 
-window_test() ->
-    {ok, P} = start_link(),
+-ifdef(TEST).
+aggregator_test_() ->
+    {foreach,
+     fun setup/0, fun teardown/1,
+     [?_test(expire()),
+      ?_test(window()),
+      ?_test(merged_window())
+     ]
+    }.
 
-    gen_server:cast(P, {statman_update, [sample_histogram('a@knutin')]}),
-    gen_server:cast(P, {statman_update, [sample_histogram('b@knutin')]}),
-    gen_server:cast(P, {statman_update, [sample_counter('a@knutin')]}),
-    gen_server:cast(P, {statman_update, [sample_counter('b@knutin')]}),
+setup() ->
+    {ok, Pid} = start_link(),
+    true = unlink(Pid),
+    Pid.
+
+teardown(Pid) ->
+    exit(Pid, kill),
+    timer:sleep(1000),
+    false = is_process_alive(Pid).
+
+expire() ->
+    gen_server:cast(?MODULE, {statman_update, [sample_histogram('a@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_counter('a@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_counter('a@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_gauge('a@knutin', 1)]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_gauge('a@knutin', 3)]}),
+
+    ?assert(lists:all(fun (M) ->
+                              V = proplists:get_value(value, M, 0),
+                              V =/= 0 andalso V =/= []
+                      end, element(2, get_window(2)))),
+
+    timer:sleep(3000),
+
+    ?assert(lists:all(fun (M) ->
+                              V = proplists:get_value(value, M),
+                              V == 0 orelse V =:= []
+                      end, element(2, get_window(2)))).
+
+window() ->
+    gen_server:cast(?MODULE, {statman_update, [sample_histogram('a@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_counter('a@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_counter('a@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_gauge('a@knutin', 1)]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_gauge('a@knutin', 3)]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_histogram('b@knutin')]}),
 
     timer:sleep(1000),
 
-    gen_server:cast(P, {statman_update, [sample_histogram('a@knutin')]}),
-    gen_server:cast(P, {statman_update, [sample_histogram('b@knutin')]}),
-    gen_server:cast(P, {statman_update, [sample_counter('a@knutin')]}),
-    gen_server:cast(P, {statman_update, [sample_counter('b@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_histogram('a@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_histogram('a@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_counter('a@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_gauge('a@knutin', 2)]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_histogram('b@knutin')]}),
+
+    {ok, Aggregated} = get_window(60),
+
+    [MergedCounter, MergedGauge, MergedHistogramA, MergedHistogramB] = lists:sort(Aggregated),
+
+
+    ?assertEqual([{key, {<<"/highscores">>,db_a_latency}},
+                  {node, 'a@knutin'},
+                  {type, histogram},
+                  {value, [{1, 3}, {2, 6}, {3, 9}]},
+                  {window, 60000}], MergedHistogramA),
+
+    ?assertEqual([{key, {<<"/highscores">>,db_a_latency}},
+                  {node, 'b@knutin'},
+                  {type, histogram},
+                  {value, [{1, 2}, {2, 4}, {3, 6}]},
+                  {window, 60000}], MergedHistogramB),
+
+    ?assertEqual([{key, {foo, bar}},
+                  {node, 'a@knutin'},
+                  {type, counter},
+                  {value, 90},
+                  {window, 60000}], MergedCounter),
+
+    ?assertEqual([{key, {foo, baz}},
+                  {node, 'a@knutin'},
+                  {type, gauge},
+                  {value, 2},
+                  {window, 60000}], MergedGauge).
+
+merged_window() ->
+    gen_server:cast(?MODULE, {statman_update, [sample_histogram('a@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_histogram('b@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_counter('a@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_counter('b@knutin')]}),
+
+    timer:sleep(1000),
+
+    gen_server:cast(?MODULE, {statman_update, [sample_histogram('a@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_histogram('b@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_counter('a@knutin')]}),
+    gen_server:cast(?MODULE, {statman_update, [sample_counter('b@knutin')]}),
 
     ?assertEqual([
                   {nodekey(sample_counter('a@knutin')), counter},
@@ -222,10 +313,10 @@ window_test() ->
                   {nodekey(sample_histogram('b@knutin')), histogram}
                  ], lists:sort(element(2, get_keys()))),
 
-    {ok, Aggregated} = get_window(60),
+    {ok, Aggregated} = get_merged_window(60),
 
-    [_ACounter, _BCounter, MergedCounter,
-     _AHistogram, _BHistogram, MergedHistogram] = lists:sort(Aggregated),
+    [_CounterA, _CounterB, MergedCounter,
+     _HistogramA, _HistogramB, MergedHistogram] = lists:sort(Aggregated),
 
 
     ?assertEqual([{key, {<<"/highscores">>,db_a_latency}},
@@ -239,8 +330,6 @@ window_test() ->
                   {type, counter},
                   {value, 120},
                   {window, 60000}], MergedCounter).
-
-
 
 
 
@@ -259,3 +348,11 @@ sample_counter(Node) ->
      {type,counter},
      {value,30},
      {window,1000}].
+
+sample_gauge(Node, Value) ->
+    [{key,{foo, baz}},
+     {node,Node},
+     {type,gauge},
+     {value,Value},
+     {window,1000}].
+-endif.
