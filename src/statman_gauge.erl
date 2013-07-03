@@ -6,7 +6,7 @@
 -define(TABLE, statman_gauges).
 
 init() ->
-    ets:new(?TABLE, [named_table, public, set]),
+    ets:new(?TABLE, [named_table, public, set, {write_concurrency, true}]),
     ok.
 
 set(Key, Value) when is_integer(Value) orelse is_float(Value) ->

@@ -25,7 +25,7 @@
 %%
 
 init() ->
-    ets:new(?TABLE, [named_table, public, set]),
+    ets:new(?TABLE, [named_table, public, set, {write_concurrency, true}]),
     ok.
 
 record_value(UserKey, {MegaSecs, Secs, MicroSecs}) when
