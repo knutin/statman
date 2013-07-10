@@ -55,7 +55,7 @@ set(Key, Value) ->
     end.
 
 
-incr(Key, Incr) ->
+incr(Key, Incr) when is_integer(Incr) ->
     %% If lock contention on the single key becomes a problem, we can
     %% use multiple keys and try to snapshot a value across all
     %% subkeys. See
@@ -66,7 +66,11 @@ incr(Key, Incr) ->
             ok;
         _ ->
             ok
-    end.
+    end;
+
+incr(_Key, Float) when is_float(Float) ->
+    error(badarg).
+
 
 
 
@@ -82,7 +86,8 @@ counter_test_() ->
       ?_test(test_operations()),
       ?_test(find_counters()),
       ?_test(benchmark()),
-      ?_test(test_reset())
+      ?_test(test_reset()),
+      ?_test(floats())
      ]
     }.
 
@@ -137,6 +142,10 @@ test_reset() ->
     ok = reset(foo, Count),
     ?assertEqual(3, get(foo)).
 
+
+floats() ->
+    ?assertError(badarg, get(foo)),
+    ?assertError(badarg, incr(foo, 2.5)).
 
 
 
