@@ -7,7 +7,12 @@
 -module(statman_aggregator).
 -behaviour(gen_server).
 
--export([start_link/0, get_window/1, get_merged_window/1, get_keys/0]).
+-export([start_link/0,
+         get_window/1,
+         get_window/2,
+         get_merged_window/1,
+         get_merged_window/2,
+         get_keys/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -31,10 +36,16 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 get_window(Size) ->
-    gen_server:call(?MODULE, {get_window, Size, false}).
+    get_window(Size, 5000).
+
+get_window(Size, Timeout) ->
+    gen_server:call(?MODULE, {get_window, Size, false}, Timeout).
 
 get_merged_window(Size) ->
-    gen_server:call(?MODULE, {get_window, Size, true}).
+    get_merged_window(Size, 5000).
+
+get_merged_window(Size, Timeout) ->
+    gen_server:call(?MODULE, {get_window, Size, true}, Timeout).
 
 get_keys() ->
     gen_server:call(?MODULE, get_keys).
