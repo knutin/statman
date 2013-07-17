@@ -4,7 +4,9 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -export([start_link/0]).
--export([add_gauge/1, add_counter/1, remove_gauge/1, remove_counter/1]).
+-export([add_gauge/1, add_gauge/2,
+         add_counter/1, add_counter/2]).
+-export([remove_gauge/1, remove_counter/1]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
@@ -20,7 +22,7 @@ start_link() ->
 
 add_gauge(F)             -> add_fun({gauge, F}, 10000).
 add_gauge(F, Interval)   -> add_fun({gauge, F}, Interval).
-    
+
 add_counter(F)           -> add_fun({counter, F}, 10000).
 add_counter(F, Interval) -> add_fun({counter, F}, Interval).
 
