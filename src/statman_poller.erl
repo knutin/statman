@@ -65,7 +65,13 @@ handle_info({poll, Interval}, State) ->
                       (_) ->
                           ok
                   end, State#state.fs),
+    {noreply, State};
+
+handle_info(_, State) ->
+    %% Ignore unknown messages, might come from gen calls that timed
+    %% out, but response got sent anyway..
     {noreply, State}.
+
 
 terminate(_Reason, _State) ->
     ok.
