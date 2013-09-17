@@ -65,7 +65,8 @@ handle_info({poll, Interval}, State) ->
                       ({I, {counter, F}}) when I =:= Interval ->
                           [statman_counter:incr(K, V) || {K, V} <- F()];
                       ({I, {histogram, F}}) when I =:= Interval ->
-                          [statman_histogram:record_value(K, V) || {K, V} <- F()];
+                          [statman_histogram:record_value(
+                             K, statman_histogram:bin(V)) || {K, V} <- F()];
                       (_) ->
                           ok
                   end, State#state.fs),
