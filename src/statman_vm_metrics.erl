@@ -16,8 +16,11 @@ get_gauges() ->
 
     RunQueue = {{vm, run_queue}, erlang:statistics(run_queue)},
     ProcessCount = {{vm, process_count}, erlang:system_info(process_count)},
+    {NumberOfGCs, WordsReclaimed} = erlang:statistics(garbage_collection),
+    GC = [{{vm, num_gcs}, NumberOfGCs},
+          {{vm, words_reclaimed}, WordsReclaimed}],
 
-    [RunQueue, ProcessCount] ++ Memory ++ message_stats() ++ ets_stats().
+    [RunQueue, ProcessCount] ++ Memory ++ message_stats() ++ ets_stats() ++ GC.
 
 
 message_stats() ->
