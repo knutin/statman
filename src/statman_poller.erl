@@ -60,16 +60,19 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info({poll, Interval}, State) ->
-    lists:foreach(fun ({I, {gauge, F}}) when I =:= Interval ->
-                          [statman_gauge:set(K, V) || {K, V} <- F()];
-                      ({I, {counter, F}}) when I =:= Interval ->
-                          [statman_counter:incr(K, V) || {K, V} <- F()];
-                      ({I, {histogram, F}}) when I =:= Interval ->
-                          [statman_histogram:record_value(
-                             K, statman_histogram:bin(V)) || {K, V} <- F()];
-                      (_) ->
-                          ok
-                  end, State#state.fs),
+    Poll = fun ({I, {gauge, F}}) when I =:= Interval ->
+                   [statman_gauge:set(K, V) || {K, V} <- F()];
+               ({I, {counter, F}}) when I =:= Interval ->
+                   [statman_counter:incr(K, V) || {K, V} <- F()];
+               ({I, {histogram, F}}) when I =:= Interval ->
+                   [statman_histogram:record_value(
+                      K, statman_histogram:bin(V)) || {K, V} <- F()];
+               (_) ->
+                   ok
+           end,
+    spawn_link(fun () ->
+                       lists:foreach(Poll, State#state.fs)
+               end),
     {noreply, State};
 
 handle_info(_, State) ->
