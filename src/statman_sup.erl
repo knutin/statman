@@ -11,6 +11,8 @@ start_link() ->
 
 init([]) ->
     Children = [
+                ?CHILD(statman_server, worker),
+                ?CHILD(statman_aggregator, worker),
                 ?CHILD(statman_poller, worker),
                 ?CHILD(statman_poller_registry, worker)
                ],
