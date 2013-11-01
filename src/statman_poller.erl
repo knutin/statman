@@ -12,7 +12,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {timers = [], fs = []}).
+-record(state, {timers = []}).
+
 
 %%%===================================================================
 %%% API
@@ -36,42 +37,39 @@ remove_fun(TypedF) -> gen_server:call(?MODULE, {remove, TypedF}).
 
 add_fun(TypedF, Interval) -> gen_server:call(?MODULE, {add, TypedF, Interval}).
 
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
 
 init([]) ->
-    {ok, #state{fs = []}}.
+    {ok, #state{timers = []}}.
 
-handle_call({add, TypedF, Interval}, _From, #state{fs = Fs} = State) ->
-    NewTimers = case orddict:find(Interval, State#state.timers) of
-                    {ok, _} -> State#state.timers;
-                    error ->
-                        {ok, TRef} = timer:send_interval(Interval, {poll, Interval}),
-                        orddict:store(Interval, TRef, State#state.timers)
-                end,
-
-    {reply, ok, State#state{timers = NewTimers, fs = [{Interval, TypedF} | Fs]}};
-
-handle_call({remove, TypedF}, _From, #state{fs = Fs} = State) ->
-    {reply, ok, State#state{fs = lists:keydelete(TypedF, 2, Fs)}}.
+handle_call({add, TypedF, Interval}, _From, #state{timers = Timers} = State) ->
+    %%TODO: check if this metric with same not exists
+    statman_poller_registry:add(TypedF, Interval),
+    {reply, ok, State#state{timers = maybe_add_timer(Interval, Timers)}};
+handle_call({remove, TypedF}, _From, State) ->
+    statman_poller_registry:delete(TypedF),
+    %%TODO: remove also timers if not used?
+    {reply, ok, State}.
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info({poll, Interval}, State) ->
-    Poll = fun ({I, {gauge, F}}) when I =:= Interval ->
+    Poll = fun ({{gauge, F}, I}) when I =:= Interval ->
                    [statman_gauge:set(K, V) || {K, V} <- F()];
-               ({I, {counter, F}}) when I =:= Interval ->
+               ({{counter, F}, I}) when I =:= Interval ->
                    [statman_counter:incr(K, V) || {K, V} <- F()];
-               ({I, {histogram, F}}) when I =:= Interval ->
+               ({{histogram, F}, I}) when I =:= Interval ->
                    [statman_histogram:record_value(
                       K, statman_histogram:bin(V)) || {K, V} <- F()];
                (_) ->
                    ok
            end,
     spawn_link(fun () ->
-                       lists:foreach(Poll, State#state.fs)
+                       lists:foreach(Poll, statman_poller_registry:get_all())
                end),
     {noreply, State};
 
@@ -90,20 +88,29 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+maybe_add_timer(Interval, Timers) ->
+    case orddict:find(Interval, Timers) of
+        {ok, _} -> Timers;
+        error   ->
+            {ok, TRef} = timer:send_interval(Interval, {poll, Interval}),
+            orddict:store(Interval, TRef, Timers)
+    end.
 
 poller_test_() ->
     {foreach, fun setup/0, fun teardown/1,
      [
-      ?_test(poller_fun()),
-      ?_test(remove_poller())
+      ?_test(poller_fun())
+%%      , ?_test(remove_poller())
      ]}.
 
 setup() ->
+    statman_poller_registry:start_link(),
     statman_counter:init(),
     statman_gauge:init(),
     statman_histogram:init().
 
 teardown(_) ->
+%    statman_poller_registry:stop(),
     [ets:delete(T) || T <- [statman_counters, statman_gauges, statman_histograms]].
 
 poller_fun() ->
@@ -126,12 +133,18 @@ poller_fun() ->
     ?assertMatch([{gauge, _}], statman_gauge:get_all()).
 
 
-remove_poller() ->
-    GaugeF = fun() -> [{gauge, 5}] end,
-    {ok, Init} = init([]),
+%% remove_poller() ->
+%%     GaugeF = fun() -> [{gauge, 5}] end,
+%%     init([]),
 
-    {_, ok, Added} = handle_call({add, {gauge, GaugeF}, 1000}, undefined, Init),
-    ?assertMatch(#state{fs = [{1000, {gauge, GaugeF}}]}, Added),
+%%     add_fun({gauge, GaugeF}, 1000),
+%%     R = statman_poller_registry:get({gauge, GaugeF}),
+%%     ?debugFmt("~p", [R]),
+%%     ?assertMatch(R, {1000, {gauge, GaugeF}}),
 
-    {_, ok, Removed} = handle_call({remove, {gauge, GaugeF}}, undefined, Added),
-    ?assertMatch(#state{fs = []}, Removed).
+%%     remove_fun({gauge, GaugeF}),
+
+%%     ?assertMatch(
+%%        statman_poller_registry:get({gauge, GaugeF}),
+%%        {ok, []}
+%%       ).
