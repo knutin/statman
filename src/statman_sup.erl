@@ -8,6 +8,7 @@
         {I, {I, start_link, Args}, permanent, 5000, Type, [I]}).
 
 start_link(ReportInterval) ->
+    io:format("statman_sup:start_link(~p)~n", [ReportInterval]),
     supervisor:start_link({local, ?MODULE}, ?MODULE, [ReportInterval]).
 
 init(ReportInterval) ->
