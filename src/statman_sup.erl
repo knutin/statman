@@ -7,10 +7,10 @@
 -define(CHILD(I, Type, Args),
         {I, {I, start_link, Args}, permanent, 5000, Type, [I]}).
 
-start_link([ReportInterval]) ->
+start_link(ReportInterval) ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, [ReportInterval]).
 
-init(ReportInterval) ->
+init([ReportInterval]) ->
     io:format("statman_sup:start_link(~p)~n", [ReportInterval]),
     Children = [
                 ?CHILD(statman_server, worker, [ReportInterval]),
