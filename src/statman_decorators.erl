@@ -51,7 +51,9 @@ decorated_function(A, B) ->
 
 decorators_test() ->
     ok = statman_histogram:init(),
+    ok = statman_counter:init(),
     3 = decorated_function(1, 2),
+    ?assertEqual(1, statman_counter:get(rate_key)),
     ?assertEqual([memory_key, reductions_key, runtime_key],
                  lists:sort(statman_histogram:keys())).
 -endif.
