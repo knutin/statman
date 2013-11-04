@@ -7,8 +7,11 @@
 -define(CHILD(I, Type, Args),
         {I, {I, start_link, Args}, permanent, 5000, Type, [I]}).
 
-start_link(StartArgs) ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, StartArgs).
+start_link([]) ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []);
+start_link([ReportInterval, StartAggregator]) ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE,
+                          [ReportInterval, StartAggregator]).
 
 init([]) ->
     Children = get_children(1000, true),
