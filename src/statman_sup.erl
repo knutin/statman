@@ -11,6 +11,7 @@ start_link(ReportInterval) ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, [ReportInterval]).
 
 init([ReportInterval]) ->
+    %%TODO: add param to specify if aggregator should be started?
     Children = [
                 ?CHILD(statman_server, worker, [ReportInterval]),
                 ?CHILD(statman_poller_registry, worker, []),
