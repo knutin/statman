@@ -43,6 +43,7 @@ add_fun(TypedF, Interval) -> gen_server:call(?MODULE, {add, TypedF, Interval}).
 %%%===================================================================
 
 init([]) ->
+    io:format("Loading poller....", []),
     {ok, #state{timers = load_timers()}}.
 
 handle_call({add, TypedF, Interval}, _From, #state{timers = Timers} = State) ->
@@ -92,6 +93,7 @@ load_timers() ->
     load_timers(statman_poller_registry:get_all(), orddict:new()).
 
 load_timers([], Timers) ->
+    io:format("Loading poller timers=~p", [orddict:to_list(Timers)]),
     Timers;
 load_timers([{_, Interval} | T], Timers) ->
     load_timers(T, maybe_add_timer(Interval, Timers)).
