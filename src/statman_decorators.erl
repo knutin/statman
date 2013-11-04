@@ -10,7 +10,7 @@
 %%
 
 runtime(Fun, Args, Options) ->
-    Key = proplists:get_value(key, Options, erlang:fun_info(Fun, name)),
+    Key = proplists:get_value(key, Options, name(Fun)),
     Start = os:timestamp(),
     Result = erlang:apply(Fun, Args),
     statman_histogram:record_value(Key, Start),
@@ -23,7 +23,7 @@ memory(Fun, Args, Options) ->
     process_info_decorator(Fun, Args, Options, memory).
 
 call_rate(Fun, Args, Options) ->
-    Key = proplists:get_value(key, Options, erlang:fun_info(Fun, name)),
+    Key = proplists:get_value(key, Options, name(Fun)),
     statman_counter:incr(Key),
     apply(Fun, Args).
 
@@ -33,12 +33,17 @@ call_rate(Fun, Args, Options) ->
 %%
 
 process_info_decorator(Fun, Args, Options, InfoKey) ->
-    Key = proplists:get_value(key, Options, erlang:fun_info(Fun, name)),
+    Key = proplists:get_value(key, Options, name(Fun)),
     {InfoKey, Start} = process_info(self(), InfoKey),
     Result = erlang:apply(Fun, Args),
     {InfoKey, End} = process_info(self(), InfoKey),
     statman_histogram:record_value(Key, (End - Start)),
     Result.
+
+name(Fun) ->
+    {name, Name} = erlang:fun_info(Fun, name),
+    Name.
+
 
 
 -ifdef(TEST).
@@ -49,6 +54,10 @@ process_info_decorator(Fun, Args, Options, InfoKey) ->
 decorated_function(A, B) ->
     A + B.
 
+-decorate({statman_decorators, call_rate}).
+no_key(A, B) ->
+    A + B.
+
 decorators_test() ->
     ok = delete_tables(), %% remove leftovers from other tests
     ok = create_tables(),
@@ -56,6 +65,14 @@ decorators_test() ->
     ?assertEqual(1, statman_counter:get(rate_key)),
     ?assertEqual([memory_key, reductions_key, runtime_key],
                  lists:sort(statman_histogram:keys())),
+    ok = delete_tables().
+
+no_key_test() ->
+    ok = delete_tables(),
+    ok = create_tables(),
+    3 = no_key(1, 2),
+    ?assertEqual([{'-no_key_decorator1___/2-fun-0-',1}],
+                 statman_counter:get_all()),
     ok = delete_tables().
 
 
