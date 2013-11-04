@@ -43,7 +43,7 @@ add_fun(TypedF, Interval) -> gen_server:call(?MODULE, {add, TypedF, Interval}).
 %%%===================================================================
 
 init([]) ->
-    {ok, #state{timers = []}}.
+    {ok, #state{timers = load_timers()}}.
 
 handle_call({add, TypedF, Interval}, _From, #state{timers = Timers} = State) ->
     %%TODO: check if this metric with same not exists
@@ -88,6 +88,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+load_timers() ->
+    Timers = orddict:new(),
+    [maybe_add_timer(I, Timers) || {_,I} <- statman_poller_registry:get_all()].
+
 maybe_add_timer(Interval, Timers) ->
     case orddict:find(Interval, Timers) of
         {ok, _} -> Timers;
