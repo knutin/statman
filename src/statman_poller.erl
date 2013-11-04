@@ -46,7 +46,7 @@ init([]) ->
     {ok, #state{timers = load_timers()}}.
 
 handle_call({add, TypedF, Interval}, _From, #state{timers = Timers} = State) ->
-    %%TODO: check if this metric with same not exists
+    %%TODO: check if this metric with same not exists?
     statman_poller_registry:add(TypedF, Interval),
     {reply, ok, State#state{timers = maybe_add_timer(Interval, Timers)}};
 handle_call({remove, TypedF}, _From, State) ->
@@ -89,8 +89,12 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 load_timers() ->
-    Timers = orddict:new(),
-    [maybe_add_timer(I, Timers) || {_,I} <- statman_poller_registry:get_all()].
+    load_timers(statman_poller_registry:get_all(), orddict:new()).
+
+load_timers([], Timers) ->
+    Timers;
+load_timers([{_, Interval} | T], Timers) ->
+    load_timers(T, maybe_add_timer(Interval, Timers)).
 
 maybe_add_timer(Interval, Timers) ->
     case orddict:find(Interval, Timers) of
