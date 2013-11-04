@@ -5,3 +5,5 @@ ebin
 *.o
 *.beam
 *.plt
+*~
+*#
