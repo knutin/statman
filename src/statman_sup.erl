@@ -13,7 +13,7 @@ start_link(ReportInterval) ->
 init([ReportInterval]) ->
     Children = [
                 ?CHILD(statman_server, worker, [ReportInterval]),
-                ?CHILD(statman_poller, worker, []),
-                ?CHILD(statman_poller_registry, worker, [])
+                ?CHILD(statman_poller_registry, worker, []),
+                ?CHILD(statman_poller, worker, [])
                ],
     {ok, {{one_for_one, 5, 10}, Children}}.
