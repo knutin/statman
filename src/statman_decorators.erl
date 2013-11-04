@@ -50,10 +50,21 @@ decorated_function(A, B) ->
     A + B.
 
 decorators_test() ->
-    ok = statman_histogram:init(),
-    ok = statman_counter:init(),
+    ok = delete_tables(), %% remove leftovers from other tests
+    ok = create_tables(),
     3 = decorated_function(1, 2),
     ?assertEqual(1, statman_counter:get(rate_key)),
     ?assertEqual([memory_key, reductions_key, runtime_key],
-                 lists:sort(statman_histogram:keys())).
+                 lists:sort(statman_histogram:keys())),
+    ok = delete_tables().
+
+
+create_tables() ->
+    ok = statman_histogram:init(),
+    ok = statman_counter:init().
+
+delete_tables() ->
+    (catch ets:delete(statman_histograms)),
+    (catch ets:delete(statman_counters)),
+    ok.
 -endif.
