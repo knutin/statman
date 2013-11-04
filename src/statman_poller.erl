@@ -49,6 +49,7 @@ init([]) ->
 handle_call({add, TypedF, Interval}, _From, #state{timers = Timers} = State) ->
     %%TODO: check if this metric with same not exists?
     statman_poller_registry:add(TypedF, Interval),
+    io:format("add poller ~p, ~p....", [TypedF, Interval]),
     {reply, ok, State#state{timers = maybe_add_timer(Interval, Timers)}};
 handle_call({remove, TypedF}, _From, State) ->
     statman_poller_registry:delete(TypedF),
@@ -90,7 +91,9 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 load_timers() ->
-    load_timers(statman_poller_registry:get_all(), orddict:new()).
+    Pollers = statman_poller_registry:get_all(),
+    io:format("Loading pollers=~p", [Pollers]),
+    load_timers(Pollers, orddict:new()).
 
 load_timers([], Timers) ->
     io:format("Loading poller timers=~p", [orddict:to_list(Timers)]),
