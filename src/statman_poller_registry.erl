@@ -62,7 +62,7 @@ init([]) ->
 handle_call(info, _From,  #state{store = Store} = State) ->
    {reply, ets:info(Store), State};
 handle_call({get, Key}, _From, #state{store = Store} = State) ->
-    {reply, get_value(Key, Store), State};
+    {reply, ets:lookup(Store, Key), State};
 handle_call({get_by_value, Value}, _From,  #state{store = Store} = State) ->
     Result = [{K,V} || {K,V} <- ets:tab2list(Store), V =:= Value],
     {reply, Result, State};
@@ -90,8 +90,3 @@ code_change(_OldVsn, State, _Extra) ->
 %%%============================================================================
 %%% Internal functionality
 %%%============================================================================
-get_value(Key, Store) ->
-    case ets:lookup(Store, Key) of
-        []           -> {ok, []};
-        [{Key, Val}] -> {ok, Val}
-    end.

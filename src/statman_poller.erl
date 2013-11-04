@@ -108,7 +108,7 @@ poller_test_() ->
     {foreach, fun setup/0, fun teardown/1,
      [
       ?_test(poller_fun())
-%%      , ?_test(remove_poller())
+      , ?_test(remove_poller())
      ]}.
 
 setup() ->
@@ -118,7 +118,6 @@ setup() ->
     statman_histogram:init().
 
 teardown(_) ->
-%    statman_poller_registry:stop(),
     [ets:delete(T) || T <- [statman_counters, statman_gauges, statman_histograms]].
 
 poller_fun() ->
@@ -140,19 +139,16 @@ poller_fun() ->
     ?assertEqual([counter], statman_counter:counters()),
     ?assertMatch([{gauge, _}], statman_gauge:get_all()).
 
+remove_poller() ->
+    GaugeF = fun() -> [{gauge, 5}] end,
+    init([]),
 
-%% remove_poller() ->
-%%     GaugeF = fun() -> [{gauge, 5}] end,
-%%     init([]),
+    add_fun({gauge, GaugeF}, 1000),
+    [R] = statman_poller_registry:get({gauge, GaugeF}),
+    ?assertEqual(R, {{gauge, GaugeF}, 1000}),
 
-%%     add_fun({gauge, GaugeF}, 1000),
-%%     R = statman_poller_registry:get({gauge, GaugeF}),
-%%     ?debugFmt("~p", [R]),
-%%     ?assertMatch(R, {1000, {gauge, GaugeF}}),
-
-%%     remove_fun({gauge, GaugeF}),
-
-%%     ?assertMatch(
-%%        statman_poller_registry:get({gauge, GaugeF}),
-%%        {ok, []}
-%%       ).
+    remove_fun({gauge, GaugeF}),
+    ?assertEqual(
+       statman_poller_registry:get({gauge, GaugeF}),
+       []
+      ).
