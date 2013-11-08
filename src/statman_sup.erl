@@ -25,12 +25,10 @@ get_children(ReportInterval, true) ->
     [
      ?CHILD(statman_aggregator, worker, []),
      ?CHILD(statman_server, worker, [ReportInterval]),
-     ?CHILD(statman_poller_registry, worker, []),
-     ?CHILD(statman_poller, worker, [])
+     ?CHILD(statman_poller_sup, supervisor, [])
     ];
 get_children(ReportInterval, false) ->
     [
      ?CHILD(statman_server, worker, [ReportInterval]),
-     ?CHILD(statman_poller_registry, worker, []),
-     ?CHILD(statman_poller, worker, [])
+     ?CHILD(statman_poller_sup, supervisor, [])
     ].
