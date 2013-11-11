@@ -11,7 +11,8 @@
          terminate/2, code_change/3]).
 
 
--record(state, {typed_fun :: tuple(),
+-record(state, {worker_id :: integer(),
+                typed_fun :: tuple(),
                 parameter :: any(),
                 timer_ref :: term()
                }).

@@ -1,3 +1,4 @@
+%% @doc: Poller server provides API managing pollers inside of supervisor
 -module(statman_poller).
 -behaviour(gen_server).
 
@@ -8,7 +9,7 @@
          add_histogram/1, add_histogram/2
         ]).
 -export([remove_gauge/1, remove_counter/1, remove_histogram/1]).
--export([get_workers/0]).
+-export([get_worker_state/1, get_workers/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -41,6 +42,9 @@ add_fun(TypedF, Interval) ->
 get_workers() ->
     gen_server:call(?MODULE, get_workers).
 
+get_worker_state(Id) ->
+    gen_server:call(?MODULE, {get_worker_state, Id}).
+
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
@@ -56,6 +60,8 @@ handle_call({add, TypedF, Interval}, _F, #state{workers = Workers} = State) ->
     {reply, ok, State#state{workers = add_poller(TypedF, Interval, Workers)}};
 handle_call({remove, TypedF}, _F, #state{workers = Workers} = State) ->
     {reply, ok, State#state{workers = delete_poller(TypedF, Workers)}};
+handle_call({get_worker_state, Id}, _F, #state{workers = Workers} = State) ->
+    {reply, dict:find(Id, Workers), State};
 handle_call(get_workers, _F, #state{workers = Workers} = State) ->
     {reply, dict:to_list(Workers), State};
 handle_call(_Request, _F, State) ->
@@ -77,6 +83,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%%============================================================================
 %%% Internal functionality
 %%%============================================================================
+
 add_poller(TypedF, Interval, Workers) ->
     Id = get_unique_id(),
     statman_poller_sup:start_worker(Id, TypedF, Interval),

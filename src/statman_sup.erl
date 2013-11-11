@@ -13,38 +13,18 @@
 %%%===================================================================
 
 start_link([]) ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []);
-start_link(StartArgs) ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, [StartArgs]).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, [1000]);
+start_link(ReportInterval) ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE, [ReportInterval]).
 
 
 %%%===================================================================
 %%% Supervisor callbacks
 %%%===================================================================
 
-init([]) ->
-    Children = get_children(1000, true),
-    {ok, {{one_for_one, 5, 10}, Children}};
 init([ReportInterval]) ->
-    Children = get_children(ReportInterval, true),
-    {ok, {{one_for_one, 5, 10}, Children}};
-init([ReportInterval, StartAggregator]) ->
-    Children = get_children(ReportInterval, StartAggregator),
+    Children = [
+                ?CHILD(statman_server, worker, [ReportInterval]),
+                ?CHILD(statman_poller_sup, supervisor, [])
+               ],
     {ok, {{one_for_one, 5, 10}, Children}}.
-
-
-%%%===================================================================
-%%% Internal functionality
-%%%===================================================================
-
-get_children(ReportInterval, true) ->
-    [
-     ?CHILD(statman_aggregator, worker, []),
-     ?CHILD(statman_server, worker, [ReportInterval]),
-     ?CHILD(statman_poller_sup, supervisor, [])
-    ];
-get_children(ReportInterval, false) ->
-    [
-     ?CHILD(statman_server, worker, [ReportInterval]),
-     ?CHILD(statman_poller_sup, supervisor, [])
-    ].
