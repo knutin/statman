@@ -1,21 +1,20 @@
 -module(statman_sup).
 -behaviour(supervisor).
 
--export([start_link/1,start_link/2]).
+-export([start_link/1]).
 -export([init/1]).
 
 -define(CHILD(I, Type, Args),
         {I, {I, start_link, Args}, permanent, 5000, Type, [I]}).
 
-start_link([]) ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
-
-start_link(ReportInterval, StartAggregator) ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE,
-                          [ReportInterval, StartAggregator]).
+start_link(StartArgs) ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE, StartArgs).
 
 init([]) ->
     Children = get_children(1000, true),
+    {ok, {{one_for_one, 5, 10}, Children}};
+init([ReportInterval]) ->
+    Children = get_children(ReportInterval, true),
     {ok, {{one_for_one, 5, 10}, Children}};
 init([ReportInterval, StartAggregator]) ->
     Children = get_children(ReportInterval, StartAggregator),
