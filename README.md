@@ -42,6 +42,24 @@ do_work()
 statman_histogram:record_value(work_time, Start).
 ```
 
+## Decorators
+
+You can instrument a function using one of the supplied decorators:
+
+```erlang
+
+
+-decorate({statman_decorators, call_rate}).
+my_function(A, B) ->
+    A + B.
+
+-decorate({statman_decorators, runtime, [{key, {statman, key}}]}).
+other_function(foo) ->
+    bar.
+
+```
+
+
 ## How does it work
 
 Using `ets:update_counter/3` we get very efficient atomic increments /
