@@ -6,16 +6,17 @@
 
 %% =============================================================================
 statman_test_() ->
-    {foreach,
+    {setup,
         fun setup/0, fun teardown/1,
         [
-         {"Start pollers",  fun test_start_pollers/0},
-         {"Remove pollers", fun test_remove_pollers/0}
+         {timeout, 200, {"Add/remove pollers", fun test_start_remove_pollers/0}}
         ]
     }.
 
 %% =============================================================================
 setup() ->
+    {ok, _Pid} = statman_poller_sup:start_link(),
+
     statman_counter:init(),
     statman_gauge:init(),
     statman_histogram:init(),
@@ -25,35 +26,27 @@ teardown(_) ->
     [ets:delete(T) || T <- [statman_counters, statman_gauges, statman_histograms]],
     ok.
 
-test_start_pollers() ->
+test_start_remove_pollers() ->
     GaugeF     = fun() -> [{gauge, 5}] end,
-    CounterF   = fun () -> [{counter, 5}] end,
-    HistogramF = fun () -> [{histogram, 5}, {histogram, 10}] end,
+    CounterF   = fun() -> [{counter, 5}] end,
+    HistogramF = fun() -> [{histogram, 5}, {histogram, 10}] end,
 
-    ?assertEqual([], statman_counter:get_all()),
     ?assertEqual([], statman_gauge:get_all()),
+    ?assertEqual([], statman_counter:get_all()),
     ?assertEqual([], statman_histogram:keys()),
 
-    {ok, _Pid} = statman_poller_sup:start_link([]),
+    {ok, _} = statman_poller_sup:add_gauge(GaugeF, 100),
+    {ok, _} = statman_poller_sup:add_counter(CounterF, 100),
+    {ok, _} = statman_poller_sup:add_histogram(HistogramF, 100),
 
-    ok = statman_poller:add_counter(CounterF, 100),
-    ok = statman_poller:add_gauge(GaugeF, 100),
-    ok = statman_poller:add_histogram(HistogramF, 100),
+    timer:sleep(250),
 
-    timer:sleep(200),
-
-    ?assertEqual([histogram], statman_histogram:keys()),
+    ?assertMatch([{gauge, _}], statman_gauge:get_all()),
     ?assertEqual([counter], statman_counter:counters()),
-    ?assertMatch([{gauge, _}], statman_gauge:get_all()).
+    ?assertEqual([histogram], statman_histogram:keys()),
 
+    ok = statman_poller_sup:remove_gauge(GaugeF),
+    ok = statman_poller_sup:remove_counter(CounterF),
+    ok = statman_poller_sup:remove_histogram(HistogramF),
 
-test_remove_pollers() ->
-    {ok, _Pid} = statman_poller_sup:start_link([]),
-
-    GaugeF = fun() -> [{gauge, 5}] end,
-
-    ok = statman_poller:add_gauge(GaugeF, 1000),
-    ?assertEqual(1, length(statman_poller:get_workers())),
-
-    ok = statman_poller:remove_gauge(GaugeF),
-    ?assertEqual([], statman_poller:get_workers()).
+    ?assertEqual([], statman_poller_sup:get_workers()).

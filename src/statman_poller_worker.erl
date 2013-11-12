@@ -11,8 +11,7 @@
          terminate/2, code_change/3]).
 
 
--record(state, {worker_id :: integer(),
-                typed_fun :: tuple(),
+-record(state, {typed_fun :: tuple(),
                 parameter :: any(),
                 timer_ref :: term()
                }).
@@ -21,6 +20,8 @@
 %%% API
 %%%===================================================================
 
+-spec start_link(atom(), statman_poller_sup:typed_fun(), pos_integer())
+                -> ignore | {error, any()} | {ok, pid()}.
 start_link(Name, TypedF, Interval) ->
     gen_server:start_link({local, Name}, ?MODULE, [TypedF, Interval], []).
 
@@ -43,14 +44,20 @@ handle_cast(_Msg, State) ->
 
 %%TODO: do we need to spawn here?
 handle_info(poll, #state{typed_fun = {gauge, F}} = State) ->
-    [statman_gauge:set(K, V) || {K, V} <- F()],
+    run(
+      [statman_gauge:set(K, V) || {K, V} <- F()]
+     ),
     {noreply, State};
 handle_info(poll, #state{typed_fun = {counter, F}} = State) ->
-    [statman_counter:incr(K, V) || {K, V} <- F()],
+    run(
+      [statman_counter:incr(K, V) || {K, V} <- F()]
+     ),
     {noreply, State};
 handle_info(poll, #state{typed_fun = {histogram, F}} = State) ->
-    [statman_histogram:record_value(
-       K, statman_histogram:bin(V)) || {K, V} <- F()],
+    run(
+      [statman_histogram:record_value(K, statman_histogram:bin(V))
+       || {K, V} <- F()]
+     ),
     {noreply, State};
 handle_info(poll, #state{typed_fun = _TypedF} = State) ->
     {noreply, State};
@@ -67,3 +74,11 @@ terminate(_Reason, #state{timer_ref = TRef}) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+
+%%%===================================================================
+%%% Internal functionality
+%%%===================================================================
+
+run(Metric) ->
+    spawn_link(fun() -> Metric end).
