@@ -1,6 +1,6 @@
 {application, statman,
  [
-  {description, ""},
+  {description, "Statistics man to the rescue!"},
   {vsn, "0.3.1"},
   {registered, []},
   {applications, [

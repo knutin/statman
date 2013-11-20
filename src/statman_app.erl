@@ -15,7 +15,8 @@ start(_StartType, _StartArgs) ->
     application:start(public_key),
     application:start(ssl),
     application:start(lhttpc),
-    statman_sup:start_link().
+
+    statman_sup:start_link([1000]).
 
 stop(_State) ->
     ok.
