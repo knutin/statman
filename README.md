@@ -59,6 +59,33 @@ other_function(foo) ->
 
 ```
 
+## `statman_poller`
+
+It's quite common to want to poll something at an interval, like
+memory usage, reduction counts, etc. To this end, Statman includes
+`statman_poller` which can run functions at intervals on your
+behalf. Add the supervisor to your supervision tree with the following
+child specification:
+
+```erlang
+    {statman_poller_sup, {statman_poller_sup, start_link, []},
+        permanent, 5000, worker, []}]}}.
+```
+
+In your app startup, you can then create pollers, which will be
+restarted if they crash and shut down together with your application:
+
+```erlang
+queue_sizes() ->
+    [{my_queue_size, my_queue:get_size()},
+     {other_queue, foo:queue_size()}].
+
+app_setup() ->
+    {ok, _} = statman_poller_sup:add_gauge(fun ?MODULE:queue_sizes/0, 1000).
+```
+
+It's important to pass a function reference rather than the function
+itself, to make code upgrades smoother.
 
 ## How does it work
 
