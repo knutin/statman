@@ -81,7 +81,7 @@ queue_sizes() ->
      {other_queue, foo:queue_size()}].
 
 app_setup() ->
-    {ok, _} = statman_poller_sup:add_gauge(fun ?MODULE:queue_sizes/0, 1000).
+    ok = statman_poller:add_gauge(fun ?MODULE:queue_sizes/0, 1000).
 ```
 
 It's important to pass a function reference rather than the function
