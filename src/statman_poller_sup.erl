@@ -11,10 +11,12 @@
         ]).
 -export([get_workers/0]).
 -export([remove_gauge/1, remove_counter/1, remove_histogram/1]).
+-export([add_worker/2, remove_worker/1]).
 
 %% Types
--type typed_fun() :: {fun(), pos_integer()}.
--export_type([typed_fun/0]).
+-type types() :: gauge | counter | histogram.
+-type typed_fun() :: {types(), fun()}.
+-export_type([typed_fun/0, types/0]).
 
 
 %%%===================================================================
@@ -39,13 +41,13 @@ add_histogram(F) -> add_worker({histogram, F}, 10000).
 -spec add_histogram(fun(), pos_integer()) -> {ok, pid()}.
 add_histogram(F, Interval) -> add_worker({histogram, F}, Interval).
 
--spec remove_gauge(typed_fun()) -> ok.
+-spec remove_gauge(fun()) -> ok.
 remove_gauge(F) -> remove_worker({gauge, F}).
 
--spec remove_counter(typed_fun()) -> ok.
+-spec remove_counter(fun()) -> ok.
 remove_counter(F) -> remove_worker({counter, F}).
 
--spec remove_histogram(typed_fun()) -> ok.
+-spec remove_histogram(fun()) -> ok.
 remove_histogram(F) -> remove_worker({histogram, F}).
 
 -spec get_workers() -> list().
@@ -56,6 +58,23 @@ get_workers() ->
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
+-spec add_worker(typed_fun(), pos_integer()) -> {ok, pid()}.
+add_worker(TypedF, Interval) ->
+    Id = get_unique_id(TypedF),
+    ChildSpec = get_worker_spec(Id, TypedF, Interval),
+    case supervisor:start_child(?MODULE, ChildSpec) of
+        {error, Reason} ->
+            throw({unable_to_start_worker, Id, Reason});
+        {ok, Pid} ->
+            {ok, Pid}
+    end.
+
+-spec remove_worker(typed_fun()) -> ok.
+remove_worker(TypedF) ->
+    Name = get_worker_name(get_unique_id(TypedF)),
+    ok = supervisor:terminate_child(?MODULE, Name),
+    ok = supervisor:delete_child(?MODULE, Name),
+    ok.
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -68,22 +87,6 @@ init([]) ->
 %%%===================================================================
 %%% Internal functionality
 %%%===================================================================
-
-add_worker(TypedF, Interval) ->
-    Id = get_unique_id(TypedF),
-    ChildSpec = get_worker_spec(Id, TypedF, Interval),
-    case supervisor:start_child(?MODULE, ChildSpec) of
-        {error, Reason} ->
-            throw({unable_to_start_worker, Id, Reason});
-        {ok, Pid} ->
-            {ok, Pid}
-    end.
-
-remove_worker(TypedF) ->
-    Name = get_worker_name(get_unique_id(TypedF)),
-    ok = supervisor:terminate_child(?MODULE, Name),
-    ok = supervisor:delete_child(?MODULE, Name),
-    ok.
 
 get_worker_spec(Id, TypedF, Interval) ->
     Name = get_worker_name(Id),
