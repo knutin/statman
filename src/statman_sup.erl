@@ -14,7 +14,7 @@
 
 start_link([]) ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, [1000]);
-start_link(ReportInterval) ->
+start_link([ReportInterval]) ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, [ReportInterval]).
 
 
