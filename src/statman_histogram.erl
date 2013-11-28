@@ -6,6 +6,8 @@
 -module(statman_histogram).
 -export([init/0,
          record_value/2,
+         run/2,
+         run/3,
          clear/1,
          keys/0,
          get_data/1,
@@ -38,6 +40,20 @@ record_value(UserKey, {MegaSecs, Secs, MicroSecs}) when
 record_value(UserKey, Value) when is_integer(Value) ->
     histogram_incr({UserKey, Value}, 1),
     ok.
+
+
+run(Key, F) ->
+    Start = os:timestamp(),
+    Result = F(),
+    record_value(Key, Start),
+    Result.
+
+run(Key, F, Args) ->
+    Start = os:timestamp(),
+    Result = erlang:apply(F, Args),
+    record_value(Key, Start),
+    Result.
+
 
 keys() ->
     %% TODO: Maybe keep a special table of all used keys?
@@ -173,7 +189,8 @@ histogram_test_() ->
       ?_test(test_reset()),
       ?_test(test_gc()),
       ?_test(test_keys()),
-      ?_test(test_binning())
+      ?_test(test_binning()),
+      ?_test(test_run())
      ]
     }.
 
@@ -304,5 +321,14 @@ bin_test() ->
     ?assertEqual(11000, bin(11000)),
     ?assertEqual(12000000, bin(12345678)),
     ?assertEqual(120000000, bin(123456789)).
+
+
+test_run() ->
+    ?assertEqual([], keys()),
+    2 = run(foo, fun () -> 1 + 1 end),
+    ?assertEqual([foo], keys()),
+
+    2 = run(bar, fun (A, B) -> A + B end, [1, 1]),
+    ?assertEqual([bar, foo], keys()).
 
 -endif. %% TEST
