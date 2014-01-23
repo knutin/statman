@@ -1,33 +1,43 @@
 # statman - Statistics man to the rescue!
 
 Statman makes it possible to instrument and collect statistics from
-your production Erlang systems with very low overhead.
+your high-traffic production Erlang systems with very low
+overhead. The collected data points are aggregated in the VM and can
+be sent to services like Graphite, Munin, New Relic, etc.
 
 Statman uses in-memory ETS tables for low overhead logging and to
-avoid single process bottlenecks. You can concurrently collect latency
-histograms and efficiently store the raw histograms for sound
-statistical processing. See "How does it work" below.
+avoid single process bottlenecks. See "How does it work" below.
 
-The [statman_elli](https://github.com/knutin/statman_elli) project has
-a real-time dashboard of statistics and HTTP endpoints for retrieving
-stats for external tools like Munin(plugin included), Librato,
-Graphite, etc.
+Integration options:
 
-The [newrelic-erlang](https://github.com/wooga/newrelic-erlang)
-project implements an Erlang agent for a hosted application monitoring
-service called New Relic and includes a module for reading stats from
-Statman.
+ * [statman_elli][]: real-time (mobile friendly) web
+   dashboard. Exposes a small web app and a HTTP API where external
+   tools like Munin(plugin included), Librato, etc, can pull
+   aggregated stats.
+
+ * [newrelic-erlang][]: Track web transactions happening in any Erlang
+   webserver in New Relic, a hosted application monitoring service.
+
+ * [statman_graphite][]: Push data to a Graphite instance, also works
+   with hostedgraphite.com.
+
+ * [hatman][]: Push data to stathat
+
 
 ## Usage
 
-Add `statman_server` to one of your supervisors:
+Add `statman_server` to one of your supervisors with the following
+child specification. You can adjust the poll interval to your liking,
+it determines how frequently metrics will be pushed to the
+subscribers:
+
+
 ```erlang
-init([]) ->
-    {ok, {{one_for_one, 5, 10}, [{statman_server, {statman_server, start_link, [1000]},
-                                  permanent, 5000, worker, []}]}}.
+    {statman_server, {statman_server, start_link, [1000]},
+     permanent, 5000, worker, []}.
 ```
 
-From anywhere in your code:
+Statman offers three data types. Here's how to use them:
 
 ```erlang
 %% Counters measure the frequency of an event
@@ -37,18 +47,18 @@ statman_counter:incr(my_queue_in).
 statman_gauge:set(queue_size, N).
 
 %% Histograms show you the distribution of values
-Start = now(),
-do_work()
-statman_histogram:record_value(work_time, Start).
+Result = statman:run({foo, bar}, fun () -> do_something() end)
 ```
+
+Updates to counters, gauges and histograms involves one atomic write
+in ETS.
+
 
 ## Decorators
 
 You can instrument a function using one of the supplied decorators:
 
 ```erlang
-
-
 -decorate({statman_decorators, call_rate}).
 my_function(A, B) ->
     A + B.
@@ -56,7 +66,6 @@ my_function(A, B) ->
 -decorate({statman_decorators, runtime, [{key, {statman, key}}]}).
 other_function(foo) ->
     bar.
-
 ```
 
 ## `statman_poller`
@@ -82,6 +91,22 @@ queue_sizes() ->
 
 app_setup() ->
     ok = statman_poller:add_gauge(fun ?MODULE:queue_sizes/0, 1000).
+```
+
+A polling function can also be "stateful". Allowing you to measure the
+rate of change in an absolute number. If the function has arity 1, it
+will be passed the state and expected to return a new state:
+
+```erlang
+widget_rate(undefined) ->
+    TotalWidgets = count_total_widgets(),
+    {TotalWidgets, []};
+widget_rate(PrevTotalWidgets) ->
+    TotalWidgets = count_total_widgets(),
+    {TotalWidgets, [{created_widgets, TotalWidgets - PrevTotalWidgets}]}.
+
+app_setup() ->
+    ok = statman_poller:add_counter(fun ?MODULE:widget_rate/1, 1000).
 ```
 
 It's important to pass a function reference rather than the function
@@ -131,3 +156,9 @@ for the stats collected in the last N seconds.
 You need to run one server under a supervisor in each node. If you
 have a cluster of nodes, you can run the aggregator on just one of
 them, collecting stats for the whole cluster.
+
+
+[statman_elli]: https://github.com/knutin/statman_elli
+[newrelic-erlang]: https://github.com/wooga/newrelic-erlang
+[statman_graphite]: https://github.com/chrisavl/statman_graphite
+[hatman]: https://github.com/chrisavl/hatman
