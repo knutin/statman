@@ -12,8 +12,9 @@
 
 
 -record(state, {typed_fun :: tuple(),
-                parameter :: any(),
-                timer_ref :: term()
+                fun_state :: any(),
+                timer_ref :: term(),
+                interval  :: integer()
                }).
 
 %%%===================================================================
@@ -31,10 +32,10 @@ start_link(Name, TypedF, Interval) ->
 %%%===================================================================
 
 init([TypedF, Interval]) ->
-    {ok, TRef} = timer:send_interval(Interval, poll),
     {ok, #state{typed_fun = TypedF,
-                timer_ref = TRef,
-                parameter = undefined}}.
+                timer_ref = start_timer(Interval),
+                interval  = Interval,
+                fun_state = undefined}}.
 
 handle_call(_Msg, _From, State) ->
     {reply, unknown_call, State}.
@@ -43,24 +44,25 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 %%TODO: do we need to spawn here?
-handle_info(poll, #state{typed_fun = {gauge, F}} = State) ->
-    run(
-      [statman_gauge:set(K, V) || {K, V} <- F()]
-     ),
-    {noreply, State};
-handle_info(poll, #state{typed_fun = {counter, F}} = State) ->
-    run(
-      [statman_counter:incr(K, V) || {K, V} <- F()]
-     ),
-    {noreply, State};
-handle_info(poll, #state{typed_fun = {histogram, F}} = State) ->
-    run(
-      [statman_histogram:record_value(K, statman_histogram:bin(V))
-       || {K, V} <- F()]
-     ),
-    {noreply, State};
-handle_info(poll, #state{typed_fun = _TypedF} = State) ->
-    {noreply, State};
+handle_info(poll, #state{typed_fun = {Type, F}, fun_state = FunState} = State) ->
+    NewTimer = start_timer(State#state.interval),
+
+    {NewFunState, Updates} = case erlang:fun_info(F, arity) of
+                                 {arity, 0} -> {FunState, F()};
+                                 {arity, 1} -> F(FunState)
+                             end,
+    case Type of
+        gauge ->
+            [statman_gauge:set(K, V) || {K, V} <- Updates];
+        counter ->
+            [statman_counter:incr(K, V) || {K, V} <- Updates];
+        histogram ->
+            [statman_histogram:record_value(K, statman_histogram:bin(V))
+             || {K, V} <- Updates]
+    end,
+
+    {noreply, State#state{fun_state = NewFunState, timer_ref = NewTimer}};
+
 handle_info(_, State) ->
     %% Ignore unknown messages, might come from gen calls that timed
     %% out, but response got sent anyway..
@@ -69,7 +71,7 @@ handle_info(_, State) ->
 terminate(_Reason, #state{timer_ref = undefined}) ->
     ok;
 terminate(_Reason, #state{timer_ref = TRef}) ->
-    {ok, cancel} = timer:cancel(TRef),
+    erlang:cancel_timer(TRef),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -80,5 +82,5 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functionality
 %%%===================================================================
 
-run(Metric) ->
-    spawn_link(fun() -> Metric end).
+start_timer(Interval) ->
+    erlang:send_after(Interval, self(), poll).

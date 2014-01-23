@@ -6,24 +6,29 @@
 
 %% =============================================================================
 statman_test_() ->
-    {setup,
+    {foreach,
         fun setup/0, fun teardown/1,
         [
-         {timeout, 200, {"Add/remove pollers", fun test_start_remove_pollers/0}}
+         {timeout, 200, {"Add/remove pollers", fun test_start_remove_pollers/0}},
+         {timeout, 200, {"Stateful pollers", fun test_stateful_pollers/0}}
         ]
     }.
 
 %% =============================================================================
 setup() ->
-    {ok, _Pid} = statman_poller_sup:start_link(),
+    {ok, Pid} = statman_poller_sup:start_link(),
 
     statman_counter:init(),
     statman_gauge:init(),
     statman_histogram:init(),
-    ok.
+    Pid.
 
-teardown(_) ->
+teardown(Pid) ->
     [ets:delete(T) || T <- [statman_counters, statman_gauges, statman_histograms]],
+
+    process_flag(trap_exit, true),
+    exit(Pid, kill),
+    receive {'EXIT', Pid, killed} -> ok end,
     ok.
 
 test_start_remove_pollers() ->
@@ -50,3 +55,10 @@ test_start_remove_pollers() ->
     ok = statman_poller_sup:remove_histogram(HistogramF),
 
     ?assertEqual([], statman_poller_sup:get_workers()).
+
+test_stateful_pollers() ->
+    ?assertEqual([], statman_counter:get_all()),
+
+    {ok, _} = statman_poller_sup:add_counter(fun statman_vm_metrics:gc/1, 100),
+    timer:sleep(250),
+    ?assertEqual([{vm, gcs}], statman_counter:counters()).
