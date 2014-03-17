@@ -252,11 +252,15 @@ test_gc() ->
 
     ?assertEqual([{{key, 5}, 1}], ets:lookup(?TABLE, {key, 5})),
     ?assertEqual(0, gc()),
+
+    record_value(other_key, 42),
+
     reset(key, get_data(key)),
     ?assertEqual(100, gc()),
     ?assertEqual(0, gc()),
 
     ?assertEqual([], get_data(key)),
+    ?assertEqual([{42, 1}], get_data(other_key)),
     ok.
 
 test_reset() ->

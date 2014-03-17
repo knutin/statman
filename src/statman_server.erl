@@ -7,7 +7,7 @@
 -module(statman_server).
 -behaviour(gen_server).
 
--export([start_link/1, start_link/2,
+-export([start_link/1, start_link/2, start_link/3,
          add_subscriber/1, remove_subscriber/1, report/0]).
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -24,8 +24,11 @@ start_link(ReportInterval) ->
     start_link(ReportInterval, []).
 
 start_link(ReportInterval, StartSubscribers) ->
+    start_link(ReportInterval, StartSubscribers, infinity).
+
+start_link(ReportInterval, StartSubscribers, GcInterval) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE,
-                          [ReportInterval, StartSubscribers], []).
+                          [ReportInterval, StartSubscribers, GcInterval], []).
 
 add_subscriber(Ref) ->
     gen_server:call(?MODULE, {add_subscriber, Ref}).
@@ -40,12 +43,18 @@ report() ->
 %%% gen_server callbacks
 %%%===================================================================
 
-init([ReportInterval, StartSubscribers]) ->
+init([ReportInterval, StartSubscribers, GcInterval]) ->
     ok = statman_counter:init(),
     ok = statman_gauge:init(),
     ok = statman_histogram:init(),
 
     erlang:send_after(ReportInterval, self(), report),
+    case GcInterval of
+        infinity -> ok;
+        N when is_integer(N) ->
+            erlang:send_after(GcInterval, self(), {gc, GcInterval})
+    end,
+
     {ok, #state{counters = dict:new(),
                 subscribers = StartSubscribers,
                 report_interval = ReportInterval}}.
@@ -66,6 +75,13 @@ handle_info(report, #state{report_interval = Window} = State) ->
     lists:foreach(fun (S) ->
                           gen_server:cast(S, {statman_update, Stats})
                   end, State#state.subscribers),
+
+    {noreply, State};
+
+handle_info({gc, GcInterval} = GcMsg, State) ->
+    erlang:send_after(GcInterval, self(), GcMsg),
+
+    _NumGCed = statman_histogram:gc(),
 
     {noreply, State}.
 
