@@ -62,3 +62,15 @@ test_stateful_pollers() ->
     {ok, _} = statman_poller_sup:add_counter(fun statman_vm_metrics:gc/1, 100),
     timer:sleep(250),
     ?assertEqual([{vm, gcs}], statman_counter:counters()).
+
+periodic_gc_test() ->
+    GcInterval = 100,
+    {ok, State} = statman_server:init([60000, [], GcInterval]),
+    receive
+        {gc, GcInterval} -> ok
+    end,
+    statman_histogram:record_value(test, os:timestamp()),
+    statman_histogram:reset(test, statman_histogram:get_data(test)),
+    {noreply, State} = statman_server:handle_info({gc, GcInterval}, State),
+    ?assertEqual(0, ets:info(statman_histograms, size)),
+    ok.
