@@ -63,6 +63,8 @@ add_worker(TypedF, Interval) ->
     Id = get_unique_id(TypedF),
     ChildSpec = get_worker_spec(Id, TypedF, Interval),
     case supervisor:start_child(?MODULE, ChildSpec) of
+        {error, {already_started, Pid}} ->
+            {ok, Pid};
         {error, Reason} ->
             throw({unable_to_start_worker, Id, Reason});
         {ok, Pid} ->
