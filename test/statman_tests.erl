@@ -40,9 +40,13 @@ test_start_remove_pollers() ->
     ?assertEqual([], statman_counter:get_all()),
     ?assertEqual([], statman_histogram:keys()),
 
-    {ok, _} = statman_poller_sup:add_gauge(GaugeF, 100),
-    {ok, _} = statman_poller_sup:add_counter(CounterF, 100),
-    {ok, _} = statman_poller_sup:add_histogram(HistogramF, 100),
+    {ok, GaugePid}     = statman_poller_sup:add_gauge(GaugeF, 100),
+    {ok, CounterPid}   = statman_poller_sup:add_counter(CounterF, 100),
+    {ok, HistogramPid} = statman_poller_sup:add_histogram(HistogramF, 100),
+
+    ?assertEqual({ok, GaugePid}, statman_poller_sup:add_gauge(GaugeF, 100)),
+    ?assertEqual({ok, CounterPid}, statman_poller_sup:add_counter(CounterF, 100)),
+    ?assertEqual({ok, HistogramPid}, statman_poller_sup:add_histogram(HistogramF, 100)),
 
     timer:sleep(250),
 
