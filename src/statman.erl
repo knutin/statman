@@ -7,6 +7,7 @@
          decr_gauge/1,
          run/2,
          run/3,
+         run/4,
          time/2
         ]).
 
@@ -19,6 +20,7 @@ decr_gauge(Key)       -> statman_gauge:decr(Key).
 
 run(Key, F)           -> statman_histogram:run(Key, F).
 run(Key, F, Args)     -> statman_histogram:run(Key, F, Args).
+run(Key, M, F, Args)  -> statman_histogram:run(Key, M, F, Args).
 
 time(Key, Value)      -> statman_histogram:record_value(
                            Key, statman_histogram:bin(Value)).

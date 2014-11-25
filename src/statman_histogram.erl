@@ -8,6 +8,7 @@
          record_value/2,
          run/2,
          run/3,
+         run/4,
          clear/1,
          keys/0,
          get_data/1,
@@ -51,6 +52,12 @@ run(Key, F) ->
 run(Key, F, Args) ->
     Start = os:timestamp(),
     Result = erlang:apply(F, Args),
+    record_value(Key, Start),
+    Result.
+
+run(Key, M, F, Args) ->
+    Start = os:timestamp(),
+    Result = erlang:apply(M, F, Args),
     record_value(Key, Start),
     Result.
 
